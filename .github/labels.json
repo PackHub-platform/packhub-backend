@@ -1,0 +1,82 @@
+[
+  {
+    "name": "fix🔨",
+    "color": "0052CC",
+    "description": "fix 관련 레이블"
+  },
+  {
+    "name": "good first issue",
+    "color": "7057ff",
+    "description": "Good for newcomers"
+  },
+  {
+    "name": "feat💻",
+    "color": "0e8a16",
+    "description": "새로운 기능개발"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Something isn't working"
+  },
+  {
+    "name": "chore📦",
+    "color": "fbca04",
+    "description": "환경설정"
+  },
+  {
+    "name": "docs📜",
+    "color": "0075ca",
+    "description": "문서화"
+  },
+  {
+    "name": "documentation",
+    "color": "0075ca",
+    "description": "Improvements or additions to documentation"
+  },
+  {
+    "name": "duplicate",
+    "color": "cfd3d7",
+    "description": "This issue or pull request already exists"
+  },
+  {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "New feature or request"
+  },
+  {
+    "name": "help wanted",
+    "color": "008672",
+    "description": "Extra attention is needed"
+  },
+  {
+    "name": "hotfix🔥",
+    "color": "b60205",
+    "description": "핫픽스"
+  },
+  {
+    "name": "invalid",
+    "color": "e4e669",
+    "description": "This doesn't seem right"
+  },
+  {
+    "name": "question",
+    "color": "d876e3",
+    "description": "Further information is requested"
+  },
+  {
+    "name": "refactor♻️",
+    "color": "f9d0c4",
+    "description": "리팩토링"
+  },
+  {
+    "name": "release🚀",
+    "color": "000000",
+    "description": "main 배포"
+  },
+  {
+    "name": "wontfix",
+    "color": "ffffff",
+    "description": "This will not be worked on"
+  }
+]
