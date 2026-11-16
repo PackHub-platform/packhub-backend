@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: ${DB_URL} # 예: jdbc:mysql://<RDS 엔드포인트>:3306/packhub
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}

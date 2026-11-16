@@ -3,20 +3,25 @@ package com.example.packhub.global.common;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.packhub.global.config.JpaAuditingConfig;
-import jakarta.persistence.Entity;
+import com.example.testentity.AuditingTestEntity;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 
-@DataJpaTest
+// 테스트 전용 엔티티를 쓰므로 Flyway 스키마 대신 내장 H2에 Hibernate가 테이블을 만든다
+@DataJpaTest(properties = {"spring.flyway.enabled=false", "spring.jpa.hibernate.ddl-auto=create-drop"})
 @Import(JpaAuditingConfig.class)
 class BaseTimeEntityTest {
+
+	@TestConfiguration
+	@EntityScan(basePackageClasses = AuditingTestEntity.class)
+	static class TestEntityScanConfig {
+	}
 
 	@Autowired
 	private EntityManager em;
@@ -40,20 +45,10 @@ class BaseTimeEntityTest {
 		LocalDateTime createdAt = entity.getCreatedAt();
 		LocalDateTime updatedAt = entity.getUpdatedAt();
 
-		entity.name = "changed";
+		entity.changeName("changed");
 		em.flush();
 
 		assertThat(entity.getCreatedAt()).isEqualTo(createdAt);
 		assertThat(entity.getUpdatedAt()).isAfterOrEqualTo(updatedAt);
-	}
-
-	@Entity
-	static class AuditingTestEntity extends BaseTimeEntity {
-
-		@Id
-		@GeneratedValue(strategy = GenerationType.IDENTITY)
-		private Long id;
-
-		private String name;
 	}
 }
