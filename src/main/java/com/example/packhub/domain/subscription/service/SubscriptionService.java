@@ -7,6 +7,7 @@ import com.example.packhub.domain.subscription.dto.OrderRequest;
 import com.example.packhub.domain.subscription.dto.OrderResponse;
 import com.example.packhub.domain.subscription.dto.PlanResponse;
 import com.example.packhub.domain.subscription.entity.Payment;
+import com.example.packhub.domain.subscription.entity.PaymentStatus;
 import com.example.packhub.domain.subscription.entity.Plan;
 import com.example.packhub.domain.subscription.entity.Subscription;
 import com.example.packhub.domain.subscription.entity.SubscriptionStatus;
@@ -90,13 +91,13 @@ public class SubscriptionService {
 		return ConfirmResponse.from(order);
 	}
 
-	/** 이용 중인 이용권이 없으면 null을 돌려준다. */
+	/** 이용 중인 이용권이 없으면 null을 돌려준다. 최근 결제 내역에는 결제 완료(PAID) 건만 보여 준다. */
 	public MySubscriptionResponse getMySubscription(Long memberId) {
 		return subscriptionRepository.findFirstByMemberIdAndStatusIn(memberId, IN_USE)
 			.map(subscription -> MySubscriptionResponse.of(
 				subscription,
 				planRepository.findById(subscription.getPlanId()).orElseThrow(),
-				paymentRepository.findTop5ByMemberIdOrderByPaymentIdDesc(memberId)))
+				paymentRepository.findTop5ByMemberIdAndStatusOrderByPaymentIdDesc(memberId, PaymentStatus.PAID)))
 			.orElse(null);
 	}
 

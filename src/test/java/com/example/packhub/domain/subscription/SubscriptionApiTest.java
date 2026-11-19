@@ -157,6 +157,19 @@ class SubscriptionApiTest {
 	}
 
 	@Test
+	void 최근_결제_내역에는_결제_대기_주문이_보이지_않는다() throws Exception {
+		order(1L, BASIC, "MONTHLY", true);                         // 결제창을 닫아 대기로 남은 주문
+		String paidOrderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
+		confirm(1L, paidOrderNo).andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/subscriptions/me").header("X-Member-Id", 1L))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.recentPayments.length()").value(1))
+			.andExpect(jsonPath("$.data.recentPayments[0].orderNo").value(paidOrderNo))
+			.andExpect(jsonPath("$.data.recentPayments[0].status").value("PAID"));
+	}
+
+	@Test
 	void 이용권이_있으면_다시_결제할_수_없다() throws Exception {
 		String first = orderNo(order(1L, BASIC, "MONTHLY", true));
 		String second = orderNo(order(1L, BASIC, "MONTHLY", true));

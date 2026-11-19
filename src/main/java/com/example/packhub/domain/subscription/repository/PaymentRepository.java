@@ -1,6 +1,7 @@
 package com.example.packhub.domain.subscription.repository;
 
 import com.example.packhub.domain.subscription.entity.Payment;
+import com.example.packhub.domain.subscription.entity.PaymentStatus;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -16,5 +17,5 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Payment> findForUpdateByOrderNo(String orderNo);
 
-	List<Payment> findTop5ByMemberIdOrderByPaymentIdDesc(Long memberId);
+	List<Payment> findTop5ByMemberIdAndStatusOrderByPaymentIdDesc(Long memberId, PaymentStatus status);
 }
