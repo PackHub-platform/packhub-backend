@@ -12,6 +12,7 @@ import com.example.packhub.domain.subscription.entity.PaymentStatus;
 import com.example.packhub.domain.subscription.repository.PartnerConsultationRepository;
 import com.example.packhub.domain.subscription.repository.PaymentRepository;
 import com.example.packhub.domain.subscription.repository.SubscriptionRepository;
+import com.example.packhub.global.security.jwt.JwtProvider;
 import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -47,6 +49,9 @@ class SubscriptionApiTest {
 
 	@Autowired
 	private PartnerConsultationRepository partnerConsultationRepository;
+
+	@Autowired
+	private JwtProvider jwtProvider;
 
 	@AfterEach
 	void cleanUp() {
@@ -113,14 +118,14 @@ class SubscriptionApiTest {
 
 	@Test
 	void 회원_ID_헤더가_없으면_400() throws Exception {
-		mockMvc.perform(get("/api/v1/subscriptions/me"))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(1L)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
 	}
 
 	@Test
 	void 이용권이_없으면_현재_이용권_조회의_data가_없다() throws Exception {
-		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L).header(HttpHeaders.AUTHORIZATION, bearer(1L)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data").doesNotExist());
@@ -143,7 +148,7 @@ class SubscriptionApiTest {
 		assertThat(paid.getStatus()).isEqualTo(PaymentStatus.PAID);
 		assertThat(paid.getSubscriptionId()).isNotNull();
 
-		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L).header(HttpHeaders.AUTHORIZATION, bearer(1L)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.status").value("ACTIVE"))
 			.andExpect(jsonPath("$.data.plan.code").value("BASIC"))
@@ -162,7 +167,7 @@ class SubscriptionApiTest {
 		String paidOrderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
 		confirm(1L, paidOrderNo).andExpect(status().isOk());
 
-		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L).header(HttpHeaders.AUTHORIZATION, bearer(1L)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.recentPayments.length()").value(1))
 			.andExpect(jsonPath("$.data.recentPayments[0].orderNo").value(paidOrderNo))
@@ -208,7 +213,7 @@ class SubscriptionApiTest {
 	@Test
 	void 파트너_상담을_신청하면_201과_ID를_반환한다() throws Exception {
 		mockMvc.perform(post("/api/v1/partner-consultations")
-				.header("X-Member-Id", 1L)
+				.header("X-Member-Id", 1L).header(HttpHeaders.AUTHORIZATION, bearer(1L))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{"companyName":"팩허브포장","managerName":"홍길동","phone":"010-1234-5678",
@@ -221,7 +226,7 @@ class SubscriptionApiTest {
 	@Test
 	void 파트너_상담은_개인정보_동의와_이메일_형식이_필요하다() throws Exception {
 		mockMvc.perform(post("/api/v1/partner-consultations")
-				.header("X-Member-Id", 1L)
+				.header("X-Member-Id", 1L).header(HttpHeaders.AUTHORIZATION, bearer(1L))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{"companyName":"팩허브포장","managerName":"홍길동","phone":"010-1234-5678",
@@ -233,7 +238,7 @@ class SubscriptionApiTest {
 
 	private ResultActions order(long memberId, long planId, String billingCycle, boolean agreed) throws Exception {
 		return mockMvc.perform(post("/api/v1/subscriptions")
-			.header("X-Member-Id", memberId)
+			.header("X-Member-Id", memberId).header(HttpHeaders.AUTHORIZATION, bearer(memberId))
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
 				{"planId":%d,"billingCycle":"%s","agreePaymentTerms":%b,"agreeRecurringPayment":%b}
@@ -242,11 +247,16 @@ class SubscriptionApiTest {
 
 	private ResultActions confirm(long memberId, String orderNo) throws Exception {
 		return mockMvc.perform(post("/api/v1/subscriptions/confirm")
-			.header("X-Member-Id", memberId)
+			.header("X-Member-Id", memberId).header(HttpHeaders.AUTHORIZATION, bearer(memberId))
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
 				{"orderNo":"%s"}
 				""".formatted(orderNo)));
+	}
+
+	/** 로그인이 필요한 API라 회원 토큰을 붙인다. 컨트롤러가 X-Member-Id 대신 로그인 회원을 쓰게 되면 헤더는 이것만 남긴다 */
+	private String bearer(long memberId) {
+		return "Bearer " + jwtProvider.createAccessToken(memberId, "USER");
 	}
 
 	private Payment findPayment(String orderNo) {

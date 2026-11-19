@@ -35,7 +35,8 @@ public class SecurityConfig {
 	/** 로그인 없이 조회(GET)만 열어 두는 경로. 다른 도메인도 조회 공개가 필요하면 여기에 추가한다 */
 	private static final String[] PUBLIC_GET_PATHS = {
 		"/api/v1/terms/**",
-		"/api/v1/requests/**"
+		"/api/v1/requests/**",
+		"/api/v1/plans/**"
 	};
 
 	private final JwtAuthenticationEntryPoint authenticationEntryPoint;
