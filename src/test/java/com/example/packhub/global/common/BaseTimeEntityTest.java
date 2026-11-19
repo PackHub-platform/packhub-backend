@@ -39,17 +39,18 @@ class BaseTimeEntityTest {
 	}
 
 	@Test
-	void 수정하면_수정_시각만_바뀐다() {
+	void 수정하면_수정_시각만_바뀐다() throws InterruptedException {
 		AuditingTestEntity entity = new AuditingTestEntity();
 		em.persist(entity);
 		em.flush();
 		LocalDateTime createdAt = entity.getCreatedAt();
 		LocalDateTime updatedAt = entity.getUpdatedAt();
 
+		Thread.sleep(10); // 저장과 수정 시각이 같게 찍히지 않도록 잠깐 기다린다
 		entity.changeName("changed");
 		em.flush();
 
 		assertThat(entity.getCreatedAt()).isEqualTo(createdAt);
-		assertThat(entity.getUpdatedAt()).isAfterOrEqualTo(updatedAt);
+		assertThat(entity.getUpdatedAt()).isAfter(updatedAt);
 	}
 }
