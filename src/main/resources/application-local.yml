@@ -3,3 +3,6 @@ spring:
     url: jdbc:mysql://localhost:${MYSQL_PORT:3306}/packhub # compose.yaml의 로컬 MySQL
     username: packhub
     password: packhub # 로컬 전용 값
+
+jwt:
+  secret: local-only-jwt-secret-key-change-me-0123456789 # 로컬 전용 값. 서버에서는 JWT_SECRET 환경 변수를 쓴다
