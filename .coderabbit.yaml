@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: ko-KR
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches: # 기본 브랜치(dev)는 자동 포함
+      - main
+      - "chore/.*" # 다른 작업 브랜치 위에 쌓아 올린 PR도 자동 리뷰
+      - "feat/.*"
