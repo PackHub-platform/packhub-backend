@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "이용권·결제")
 @RestController
-@RequestMapping("/api/plans")
+@RequestMapping("/api/v1/plans")
 @RequiredArgsConstructor
 public class PlanController {
 

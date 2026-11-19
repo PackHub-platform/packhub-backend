@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** TODO(인증 머지 후): X-Member-Id 임시 헤더를 로그인한 회원 정보로 바꾼다. */
 @Tag(name = "이용권·결제")
 @RestController
-@RequestMapping("/api/partner-consultations")
+@RequestMapping("/api/v1/partner-consultations")
 @RequiredArgsConstructor
 public class PartnerConsultationController {
 

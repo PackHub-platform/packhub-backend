@@ -24,13 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "이용권·결제")
 @RestController
-@RequestMapping("/api/subscriptions")
+@RequestMapping("/api/v1/subscriptions")
 @RequiredArgsConstructor
 public class SubscriptionController {
 
 	private final SubscriptionService subscriptionService;
 
-	@Operation(summary = "이용권 결제 요청 (11-2)", description = "주문 정보만 계산해 돌려준다. 중간 범위에서는 저장하지 않는다.")
+	@Operation(summary = "이용권 결제 요청 (11-2)", description = "결제 대기(PENDING) 주문을 저장하고 주문번호와 금액을 돌려준다.")
 	@PostMapping
 	public ApiResponse<OrderResponse> createOrder(@RequestHeader("X-Member-Id") Long memberId,
 		@Valid @RequestBody OrderRequest request) {

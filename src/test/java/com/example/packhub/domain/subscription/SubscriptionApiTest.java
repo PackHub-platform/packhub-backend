@@ -57,7 +57,7 @@ class SubscriptionApiTest {
 
 	@Test
 	void 플랜_목록은_기초_데이터_3개를_순서대로_반환한다() throws Exception {
-		mockMvc.perform(get("/api/plans"))
+		mockMvc.perform(get("/api/v1/plans"))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.length()").value(3))
 			.andExpect(jsonPath("$.data[0].code").value("BASIC"))
@@ -113,14 +113,14 @@ class SubscriptionApiTest {
 
 	@Test
 	void 회원_ID_헤더가_없으면_400() throws Exception {
-		mockMvc.perform(get("/api/subscriptions/me"))
+		mockMvc.perform(get("/api/v1/subscriptions/me"))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
 	}
 
 	@Test
 	void 이용권이_없으면_현재_이용권_조회의_data가_없다() throws Exception {
-		mockMvc.perform(get("/api/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data").doesNotExist());
@@ -143,7 +143,7 @@ class SubscriptionApiTest {
 		assertThat(paid.getStatus()).isEqualTo(PaymentStatus.PAID);
 		assertThat(paid.getSubscriptionId()).isNotNull();
 
-		mockMvc.perform(get("/api/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.status").value("ACTIVE"))
 			.andExpect(jsonPath("$.data.plan.code").value("BASIC"))
@@ -162,7 +162,7 @@ class SubscriptionApiTest {
 		String paidOrderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
 		confirm(1L, paidOrderNo).andExpect(status().isOk());
 
-		mockMvc.perform(get("/api/subscriptions/me").header("X-Member-Id", 1L))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header("X-Member-Id", 1L))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.recentPayments.length()").value(1))
 			.andExpect(jsonPath("$.data.recentPayments[0].orderNo").value(paidOrderNo))
@@ -207,7 +207,7 @@ class SubscriptionApiTest {
 
 	@Test
 	void 파트너_상담을_신청하면_201과_ID를_반환한다() throws Exception {
-		mockMvc.perform(post("/api/partner-consultations")
+		mockMvc.perform(post("/api/v1/partner-consultations")
 				.header("X-Member-Id", 1L)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -220,7 +220,7 @@ class SubscriptionApiTest {
 
 	@Test
 	void 파트너_상담은_개인정보_동의와_이메일_형식이_필요하다() throws Exception {
-		mockMvc.perform(post("/api/partner-consultations")
+		mockMvc.perform(post("/api/v1/partner-consultations")
 				.header("X-Member-Id", 1L)
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -232,7 +232,7 @@ class SubscriptionApiTest {
 	}
 
 	private ResultActions order(long memberId, long planId, String billingCycle, boolean agreed) throws Exception {
-		return mockMvc.perform(post("/api/subscriptions")
+		return mockMvc.perform(post("/api/v1/subscriptions")
 			.header("X-Member-Id", memberId)
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
@@ -241,7 +241,7 @@ class SubscriptionApiTest {
 	}
 
 	private ResultActions confirm(long memberId, String orderNo) throws Exception {
-		return mockMvc.perform(post("/api/subscriptions/confirm")
+		return mockMvc.perform(post("/api/v1/subscriptions/confirm")
 			.header("X-Member-Id", memberId)
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
