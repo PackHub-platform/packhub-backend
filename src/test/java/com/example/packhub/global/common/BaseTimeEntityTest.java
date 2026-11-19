@@ -2,6 +2,7 @@ package com.example.packhub.global.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.packhub.PackhubApplication;
 import com.example.packhub.global.config.JpaAuditingConfig;
 import com.example.testentity.AuditingTestEntity;
 import jakarta.persistence.EntityManager;
@@ -19,7 +20,7 @@ import org.springframework.context.annotation.Import;
 class BaseTimeEntityTest {
 
 	@TestConfiguration
-	@EntityScan(basePackageClasses = AuditingTestEntity.class)
+	@EntityScan(basePackageClasses = {PackhubApplication.class, AuditingTestEntity.class})
 	static class TestEntityScanConfig {
 	}
 
