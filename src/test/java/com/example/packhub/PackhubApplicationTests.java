@@ -26,6 +26,6 @@ class PackhubApplicationTests {
 				+ "WHERE table_schema = DATABASE() AND table_name <> 'flyway_schema_history'",
 			Integer.class);
 
-		assertThat(tableCount).isEqualTo(34);
+		assertThat(tableCount).isEqualTo(35); // ERD 34개 + RefreshToken
 	}
 }
