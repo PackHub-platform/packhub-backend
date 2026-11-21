@@ -12,3 +12,9 @@ spring:
 jwt:
   secret: ${JWT_SECRET} # 서버에서는 환경 변수로만 받는다. 32바이트(영문 32자) 이상
   access-token-validity: 30m
+
+packhub:
+  s3:
+    region: ap-northeast-2
+    upload-url-expiry: 5m # 업로드 URL(presigned PUT) 유효 시간
+    view-url-expiry: 1h # 조회 URL(presigned GET) 유효 시간
