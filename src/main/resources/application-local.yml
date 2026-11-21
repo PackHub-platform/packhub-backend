@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:.env[.properties] # 루트의 .env(git 제외)를 읽는다. 없어도 실행된다. 형식은 .env.example 참고
   datasource:
     url: jdbc:mysql://localhost:${MYSQL_PORT:3306}/packhub # compose.yaml의 로컬 MySQL
     username: packhub
@@ -6,3 +8,8 @@ spring:
 
 jwt:
   secret: local-only-jwt-secret-key-change-me-0123456789 # 로컬 전용 값. 서버에서는 JWT_SECRET 환경 변수를 쓴다
+
+packhub:
+  s3:
+    bucket: ${S3_BUCKET:test-bucket} # 실제 이름은 .env에. 공개 저장소라 계정 번호가 든 버킷 이름은 올리지 않는다
+    profile: packhub # ~/.aws/credentials의 [packhub] 열쇠를 쓴다. 서버(dev)에는 없어서 EC2 IAM 역할을 쓴다

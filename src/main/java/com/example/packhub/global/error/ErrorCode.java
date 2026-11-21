@@ -30,7 +30,13 @@ public enum ErrorCode {
 	CONSULT_ONLY_PLAN(HttpStatus.BAD_REQUEST, "상담 신청이 필요한 플랜입니다."),
 	SUBSCRIPTION_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 이용 중인 이용권이 있습니다."),
 	ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 주문입니다."),
-	ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 주문입니다.");
+	ORDER_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 주문입니다."),
+
+	// 파일
+	INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
+	FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "파일 크기가 허용 범위를 벗어났습니다."),
+	FILE_NOT_UPLOADED(HttpStatus.BAD_REQUEST, "업로드된 파일을 찾을 수 없습니다. 다시 업로드해 주세요."),
+	FILE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "다른 회원의 파일입니다.");
 
 	private final HttpStatus status;
 	private final String message;

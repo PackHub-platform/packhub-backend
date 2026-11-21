@@ -3,3 +3,7 @@ spring:
     url: ${DB_URL} # 예: jdbc:mysql://<RDS 엔드포인트>:3306/packhub
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+
+packhub:
+  s3:
+    bucket: ${S3_BUCKET} # 서버 환경 변수로 받는다
