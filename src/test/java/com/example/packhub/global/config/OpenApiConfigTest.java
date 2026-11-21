@@ -29,6 +29,14 @@ class OpenApiConfigTest {
 	}
 
 	@Test
+	void 로그인_회원_파라미터는_API_문서에_입력칸으로_나오지_않는다() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.paths['/api/v1/subscriptions/me'].get.parameters").doesNotExist())
+			.andExpect(jsonPath("$.paths['/api/v1/subscriptions'].post.parameters").doesNotExist());
+	}
+
+	@Test
 	void Swagger_화면은_토큰_없이_열린다() throws Exception {
 		mockMvc.perform(get("/swagger-ui/index.html"))
 			.andExpect(status().isOk());
