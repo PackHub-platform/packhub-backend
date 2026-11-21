@@ -285,9 +285,15 @@ class CompanyApiTest {
 	@Test
 	void 이용권_종료일_당일까지는_등록할_수_있다() throws Exception {
 		Long lastDay = saveMember("co-lastday@test.com", "010-9100-0005", MemberType.COMPANY);
-		// 한 달 전 내일 시작한 월 결제는 오늘이 종료일이다
-		subscriptionRepository.save(Subscription.startPaid(lastDay, BASIC_PLAN, BillingCycle.MONTHLY,
-			LocalDate.now().plusDays(1).minusMonths(1)));
+		Long subscriptionId = subscriptionRepository.save(
+			Subscription.startPaid(lastDay, BASIC_PLAN, BillingCycle.MONTHLY, LocalDate.now().minusMonths(1)))
+			.getSubscriptionId();
+		// 시작일로 계산하면 월말 근처에서 종료일이 어긋나므로, 종료일을 오늘로 직접 맞춘다
+		LocalDate today = LocalDate.now();
+		jdbcTemplate.update("UPDATE `Subscription` SET `currentPeriodEnd` = ? WHERE `subscriptionId` = ?",
+			today, subscriptionId);
+		assertThat(subscriptionRepository.findById(subscriptionId).orElseThrow().getCurrentPeriodEnd())
+			.isEqualTo(today);
 
 		register(lastDay, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
 	}
