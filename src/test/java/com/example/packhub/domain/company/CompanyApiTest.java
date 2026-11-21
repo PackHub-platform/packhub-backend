@@ -3,6 +3,7 @@ package com.example.packhub.domain.company;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -49,23 +50,47 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * 업체 등록, 분류 목록, 보유 인증 목록 API.
+ * 업체 등록·상세 조회, 분류 목록, 보유 인증 목록 API.
  * 요청이 실제로 커밋되므로(테스트 롤백 불가) 테스트마다 데이터를 직접 지운다. 분류(Category)는 기초 데이터라 지우지 않는다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, CompanyApiTest.FakeS3Config.class})
 class CompanyApiTest {
+
+	/**
+	 * 상세 조회는 파일마다 조회용 URL에 서명한다. 서명은 S3에 접속하지 않고 계산만 하므로,
+	 * AWS 접근 키(~/.aws/credentials)가 없는 PC에서도 테스트가 돌도록 가짜 키를 쓴다.
+	 */
+	@TestConfiguration(proxyBeanMethods = false)
+	static class FakeS3Config {
+
+		@Bean
+		@Primary
+		S3Presigner fakeS3Presigner() {
+			return S3Presigner.builder()
+				.region(Region.AP_NORTHEAST_2)
+				.credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("test", "test")))
+				.build();
+		}
+	}
 
 	/** 기초 데이터: 100 = 대분류 "연포장·파우치", 101 = 그 아래 소분류 "삼방봉투" */
 	private static final long PARENT_CATEGORY = 100L;
@@ -382,6 +407,106 @@ class CompanyApiTest {
 	}
 
 	@Test
+	void 상세_조회는_로그인_없이_업체_정보와_목록을_등록한_순서대로_반환한다() throws Exception {
+		long companyId = registerAndGetId(fullBody());
+
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.companyId").value(companyId))
+			.andExpect(jsonPath("$.data.name").value("팩허브 팩토리"))
+			.andExpect(jsonPath("$.data.industry").value("그라비아 연포장"))
+			.andExpect(jsonPath("$.data.products").value("스탠딩파우치, 지퍼파우치"))
+			.andExpect(jsonPath("$.data.category.categoryId").value(101))
+			.andExpect(jsonPath("$.data.category.name").value("삼방봉투"))
+			.andExpect(jsonPath("$.data.category.parentId").value(100))
+			.andExpect(jsonPath("$.data.category.parentName").value("연포장·파우치"))
+			.andExpect(jsonPath("$.data.addressDetail").value("2층"))
+			.andExpect(jsonPath("$.data.foundedDate").value("2015-03-02"))
+			.andExpect(jsonPath("$.data.employeeCount").value(12))
+			.andExpect(jsonPath("$.data.viewCount").doesNotExist())
+			.andExpect(jsonPath("$.data.logo.fileId").value(logo))
+			.andExpect(jsonPath("$.data.logo.url").value(containsString("company-logo/" + company + "/")))
+			.andExpect(jsonPath("$.data.logo.contentType").value("image/png"))
+			.andExpect(jsonPath("$.data.background.fileId").value(background))
+			.andExpect(jsonPath("$.data.certifications.length()").value(2))
+			.andExpect(jsonPath("$.data.certifications[0].code").value("HACCP"))
+			.andExpect(jsonPath("$.data.certifications[0].label").value("식품안전 인증(HACCP)"))
+			.andExpect(jsonPath("$.data.certifications[1].code").value("ISO_9001"))
+			.andExpect(jsonPath("$.data.equipments.length()").value(2))
+			.andExpect(jsonPath("$.data.equipments[0].name").value("그라비아 인쇄기"))
+			.andExpect(jsonPath("$.data.equipments[0].image.fileId").value(equipmentImage1))
+			.andExpect(jsonPath("$.data.equipments[0].image.url").value(containsString("company-equipment/")))
+			.andExpect(jsonPath("$.data.equipments[1].name").value("드라이 라미네이터"))
+			.andExpect(jsonPath("$.data.portfolios.length()").value(2))
+			.andExpect(jsonPath("$.data.portfolios[0].fileId").value(portfolioPdf))
+			.andExpect(jsonPath("$.data.portfolios[0].contentType").value("application/pdf"))
+			.andExpect(jsonPath("$.data.portfolios[0].originalName").value("원본.pdf"))
+			.andExpect(jsonPath("$.data.portfolios[1].contentType").value("image/png"))
+			.andExpect(jsonPath("$.data.officeImages.length()").value(1))
+			.andExpect(jsonPath("$.data.officeImages[0].fileId").value(officeImage));
+	}
+
+	@Test
+	void 선택_항목_없이_등록한_업체는_파일이_없고_목록이_비어_있다() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.name").value("팩허브 팩토리"))
+			.andExpect(jsonPath("$.data.logo").value((Object) null))
+			.andExpect(jsonPath("$.data.background").value((Object) null))
+			.andExpect(jsonPath("$.data.homepageUrl").value((Object) null))
+			.andExpect(jsonPath("$.data.certifications.length()").value(0))
+			.andExpect(jsonPath("$.data.equipments.length()").value(0))
+			.andExpect(jsonPath("$.data.portfolios.length()").value(0))
+			.andExpect(jsonPath("$.data.officeImages.length()").value(0));
+	}
+
+	@Test
+	void 상세_조회를_해도_조회수는_오르지_않는다() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId)).andExpect(status().isOk());
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId)).andExpect(status().isOk());
+
+		assertThat(companyRepository.findById(companyId).orElseThrow().getViewCount()).isZero();
+	}
+
+	@Test
+	void 없는_업체는_404() throws Exception {
+		mockMvc.perform(get("/api/v1/companies/{companyId}", 999_999L))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 숨김_상태인_업체는_404() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+		jdbcTemplate.update("UPDATE `Company` SET `visibility` = 'HIDDEN' WHERE `companyId` = ?", companyId);
+
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 삭제한_업체는_404() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+		jdbcTemplate.update("UPDATE `Company` SET `deletedAt` = NOW() WHERE `companyId` = ?", companyId);
+
+		mockMvc.perform(get("/api/v1/companies/{companyId}", companyId))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 업체_ID가_숫자가_아니면_400() throws Exception {
+		mockMvc.perform(get("/api/v1/companies/abc"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
 	void 분류_목록은_로그인_없이_대분류_37개와_소분류를_순서대로_반환한다() throws Exception {
 		mockMvc.perform(get("/api/v1/categories").param("domain", "COMMON"))
 			.andExpect(status().isOk())
@@ -427,6 +552,13 @@ class CompanyApiTest {
 			.header(HttpHeaders.AUTHORIZATION, bearer(memberId))
 			.contentType(MediaType.APPLICATION_JSON)
 			.content(body));
+	}
+
+	private long registerAndGetId(String body) throws Exception {
+		Number companyId = JsonPath.read(register(company, body)
+			.andExpect(status().isCreated())
+			.andReturn().getResponse().getContentAsString(), "$.data.companyId");
+		return companyId.longValue();
 	}
 
 	/** 필수값만 채운 요청. 홈페이지·로고·인증·설비·사진은 보내지 않는다 */
