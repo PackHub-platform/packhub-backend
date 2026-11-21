@@ -51,6 +51,7 @@ class AuthApiTest {
 
 	@AfterEach
 	void cleanUp() {
+		jdbcTemplate.update("DELETE FROM RefreshToken");
 		memberRepository.deleteAllInBatch();
 	}
 

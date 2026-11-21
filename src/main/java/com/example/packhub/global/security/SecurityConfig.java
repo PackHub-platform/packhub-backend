@@ -51,6 +51,8 @@ public class SecurityConfig {
 			.httpBasic(AbstractHttpConfigurer::disable)
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(auth -> auth
+				// /api/v1/auth/** 중 로그아웃만 로그인이 필요하다. 위에서부터 먼저 맞는 규칙이 적용되므로 공개 경로보다 앞에 둔다
+				.requestMatchers("/api/v1/auth/logout").authenticated()
 				.requestMatchers(PUBLIC_PATHS).permitAll()
 				.requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll()
 				.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

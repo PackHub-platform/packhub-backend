@@ -2,6 +2,7 @@ package com.example.packhub.domain.member.service;
 
 import com.example.packhub.domain.member.dto.LoginRequest;
 import com.example.packhub.domain.member.dto.LoginResponse;
+import com.example.packhub.domain.member.dto.ReissueResponse;
 import com.example.packhub.domain.member.dto.SignUpNextStep;
 import com.example.packhub.domain.member.dto.SignUpRequest;
 import com.example.packhub.domain.member.dto.SignUpResponse;
@@ -28,6 +29,7 @@ public class AuthService {
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtProvider jwtProvider;
+	private final RefreshTokenService refreshTokenService;
 
 	@Transactional
 	public SignUpResponse signUp(SignUpRequest request) {
@@ -50,7 +52,8 @@ public class AuthService {
 			? SignUpNextStep.BUSINESS_VERIFICATION
 			: SignUpNextStep.DONE;
 		return new SignUpResponse(member.getMemberId(), member.getMemberType(), member.getEmail(), nextStep,
-			createAccessToken(member), TOKEN_TYPE, jwtProvider.getAccessTokenValiditySeconds());
+			createAccessToken(member), refreshTokenService.issue(member.getMemberId()), TOKEN_TYPE,
+			jwtProvider.getAccessTokenValiditySeconds());
 	}
 
 	@Transactional
@@ -62,16 +65,41 @@ public class AuthService {
 			throw new BusinessException(ErrorCode.LOGIN_FAILED);
 		}
 		// 계정 상태는 비밀번호가 맞은 사람에게만 알려 준다
+		checkActive(member);
+
+		member.recordLogin(LocalDateTime.now());
+		return new LoginResponse(createAccessToken(member), refreshTokenService.issue(member.getMemberId()), TOKEN_TYPE,
+			jwtProvider.getAccessTokenValiditySeconds(), refreshTokenService.getValiditySeconds(),
+			LoginResponse.MemberSummary.from(member));
+	}
+
+	/**
+	 * 받은 Refresh Token을 폐기하고 새 Access·Refresh 한 쌍을 준다 (회전).
+	 * 그사이 정지·탈퇴된 회원이면 새 토큰을 주지 않는다.
+	 */
+	@Transactional
+	public ReissueResponse reissue(String refreshToken) {
+		Long memberId = refreshTokenService.consume(refreshToken);
+		Member member = memberRepository.findById(memberId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
+		checkActive(member);
+		return new ReissueResponse(createAccessToken(member), refreshTokenService.issue(memberId), TOKEN_TYPE,
+			jwtProvider.getAccessTokenValiditySeconds(), refreshTokenService.getValiditySeconds());
+	}
+
+	/** 이 기기의 Refresh Token만 폐기한다. Access Token은 만료(최대 30분)까지 서버가 따로 막지 않는다 */
+	@Transactional
+	public void logout(Long memberId, String refreshToken) {
+		refreshTokenService.revoke(memberId, refreshToken);
+	}
+
+	private void checkActive(Member member) {
 		if (member.getStatus() == MemberStatus.SUSPENDED) {
 			throw new BusinessException(ErrorCode.MEMBER_SUSPENDED);
 		}
 		if (member.getStatus() == MemberStatus.WITHDRAWN) {
 			throw new BusinessException(ErrorCode.MEMBER_WITHDRAWN);
 		}
-
-		member.recordLogin(LocalDateTime.now());
-		return new LoginResponse(createAccessToken(member), TOKEN_TYPE, jwtProvider.getAccessTokenValiditySeconds(),
-			LoginResponse.MemberSummary.from(member));
 	}
 
 	/**
