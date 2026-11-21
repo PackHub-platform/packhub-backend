@@ -25,6 +25,7 @@ public enum ErrorCode {
 	MEMBER_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),
 
 	// 이용권·결제
+	COMPANY_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "기업회원만 이용할 수 있습니다."),
 	PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 플랜입니다."),
 	CONSULT_ONLY_PLAN(HttpStatus.BAD_REQUEST, "상담 신청이 필요한 플랜입니다."),
 	SUBSCRIPTION_ALREADY_ACTIVE(HttpStatus.CONFLICT, "이미 이용 중인 이용권이 있습니다."),

@@ -1,5 +1,6 @@
 package com.example.packhub.domain.subscription.service;
 
+import com.example.packhub.domain.member.service.CompanyMemberValidator;
 import com.example.packhub.domain.subscription.dto.ConfirmRequest;
 import com.example.packhub.domain.subscription.dto.ConfirmResponse;
 import com.example.packhub.domain.subscription.dto.MySubscriptionResponse;
@@ -29,7 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 이용권·결제 (중간 범위: PG 연동 없이 화면용).
  * 결제 요청은 Payment를 PENDING 주문으로 저장하고, 결제 승인은 항상 성공으로 처리해 Subscription을 시작한다.
- * TODO(기말): PG 승인·금액 검증·실패 처리. 기업회원·사업자 인증 권한 체크는 인증 기능 머지 후 추가.
+ * 결제 요청·승인은 기업회원만 할 수 있다. 현재 이용권 조회는 누구나 할 수 있고, 일반회원은 이용권이 없어 빈 응답이다.
+ * TODO(사업자 인증 1-4 머지 후): 결제 요청·승인에 사업자 인증 완료 체크(BUSINESS_NOT_VERIFIED) 추가.
+ * TODO(기말): PG 승인·금액 검증·실패 처리.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,6 +49,7 @@ public class SubscriptionService {
 	private final PlanRepository planRepository;
 	private final SubscriptionRepository subscriptionRepository;
 	private final PaymentRepository paymentRepository;
+	private final CompanyMemberValidator companyMemberValidator;
 
 	public List<PlanResponse> getPlans() {
 		return planRepository.findByIsActiveTrueOrderByPlanIdAsc().stream()
@@ -59,6 +63,7 @@ public class SubscriptionService {
 	 */
 	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	public OrderResponse createOrder(Long memberId, OrderRequest request) {
+		companyMemberValidator.validate(memberId);
 		Plan plan = getPayablePlan(request.planId());
 		validateNoSubscriptionInUse(memberId);
 
@@ -77,6 +82,7 @@ public class SubscriptionService {
 
 	@Transactional
 	public ConfirmResponse confirm(Long memberId, ConfirmRequest request) {
+		companyMemberValidator.validate(memberId);
 		Payment order = paymentRepository.findForUpdateByOrderNo(request.orderNo())
 			.filter(payment -> payment.getMemberId().equals(memberId))
 			.orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));

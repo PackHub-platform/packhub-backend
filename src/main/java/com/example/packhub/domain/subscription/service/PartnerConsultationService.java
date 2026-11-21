@@ -1,5 +1,6 @@
 package com.example.packhub.domain.subscription.service;
 
+import com.example.packhub.domain.member.service.CompanyMemberValidator;
 import com.example.packhub.domain.subscription.dto.PartnerConsultationRequest;
 import com.example.packhub.domain.subscription.entity.PartnerConsultation;
 import com.example.packhub.domain.subscription.repository.PartnerConsultationRepository;
@@ -13,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class PartnerConsultationService {
 
 	private final PartnerConsultationRepository partnerConsultationRepository;
+	private final CompanyMemberValidator companyMemberValidator;
 
 	@Transactional
 	public Long apply(Long memberId, PartnerConsultationRequest request) {
+		companyMemberValidator.validate(memberId);
 		PartnerConsultation consultation = PartnerConsultation.receive(memberId, request.companyName(),
 			request.managerName(), request.phone(), request.email(), request.content(), LocalDateTime.now());
 		return partnerConsultationRepository.save(consultation).getPartnerConsultationId();
