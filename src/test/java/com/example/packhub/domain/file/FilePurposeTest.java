@@ -49,6 +49,13 @@ class FilePurposeTest {
 	}
 
 	@Test
+	void 포트폴리오는_PDF와_이미지를_10MB까지_허용한다() {
+		assertThatCode(() -> FilePurpose.COMPANY_PORTFOLIO.validate("application/pdf", 10 * MB))
+			.doesNotThrowAnyException();
+		assertThatCode(() -> FilePurpose.COMPANY_PORTFOLIO.validate("image/png", MB)).doesNotThrowAnyException();
+	}
+
+	@Test
 	void 문서_용도도_허용되지_않은_형식은_거부한다() {
 		assertThatThrownBy(() -> FilePurpose.POST_DOCUMENT.validate("application/zip", MB))
 			.isInstanceOf(BusinessException.class)

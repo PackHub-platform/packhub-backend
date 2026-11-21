@@ -1,0 +1,393 @@
+package com.example.packhub.domain.company;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.example.packhub.TestcontainersConfiguration;
+import com.example.packhub.domain.company.entity.CertificationType;
+import com.example.packhub.domain.company.entity.Company;
+import com.example.packhub.domain.company.entity.CompanyCategory;
+import com.example.packhub.domain.company.entity.CompanyCertification;
+import com.example.packhub.domain.company.entity.CompanyEquipment;
+import com.example.packhub.domain.company.entity.CompanyImage;
+import com.example.packhub.domain.company.entity.CompanyImageType;
+import com.example.packhub.domain.company.entity.CompanyVisibility;
+import com.example.packhub.domain.company.repository.CompanyCategoryRepository;
+import com.example.packhub.domain.company.repository.CompanyCertificationRepository;
+import com.example.packhub.domain.company.repository.CompanyEquipmentRepository;
+import com.example.packhub.domain.company.repository.CompanyImageRepository;
+import com.example.packhub.domain.company.repository.CompanyRepository;
+import com.example.packhub.domain.file.entity.File;
+import com.example.packhub.domain.file.entity.FilePurpose;
+import com.example.packhub.domain.file.repository.FileRepository;
+import com.example.packhub.domain.member.entity.Member;
+import com.example.packhub.domain.member.entity.MemberType;
+import com.example.packhub.domain.member.repository.MemberRepository;
+import com.example.packhub.domain.subscription.entity.BillingCycle;
+import com.example.packhub.domain.subscription.entity.Subscription;
+import com.example.packhub.domain.subscription.repository.SubscriptionRepository;
+import com.example.packhub.global.security.jwt.JwtProvider;
+import com.jayway.jsonpath.JsonPath;
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+/**
+ * 업체 등록, 분류 목록, 보유 인증 목록 API.
+ * 요청이 실제로 커밋되므로(테스트 롤백 불가) 테스트마다 데이터를 직접 지운다. 분류(Category)는 기초 데이터라 지우지 않는다.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import(TestcontainersConfiguration.class)
+class CompanyApiTest {
+
+	/** 기초 데이터: 100 = 대분류 "연포장·파우치", 101 = 그 아래 소분류 "삼방봉투" */
+	private static final long PARENT_CATEGORY = 100L;
+	private static final long SUB_CATEGORY = 101L;
+	private static final long BASIC_PLAN = 1L;
+
+	@Autowired
+	private MockMvc mockMvc;
+
+	@Autowired
+	private CompanyRepository companyRepository;
+
+	@Autowired
+	private CompanyCategoryRepository companyCategoryRepository;
+
+	@Autowired
+	private CompanyCertificationRepository companyCertificationRepository;
+
+	@Autowired
+	private CompanyEquipmentRepository companyEquipmentRepository;
+
+	@Autowired
+	private CompanyImageRepository companyImageRepository;
+
+	@Autowired
+	private FileRepository fileRepository;
+
+	@Autowired
+	private SubscriptionRepository subscriptionRepository;
+
+	@Autowired
+	private MemberRepository memberRepository;
+
+	@Autowired
+	private JwtProvider jwtProvider;
+
+	/** 이용권을 이용 중인 기업회원 */
+	private Long company;
+	/** 이용권이 없는 기업회원 */
+	private Long companyWithoutPlan;
+	private Long general;
+
+	private Long logo;
+	private Long background;
+	private Long equipmentImage1;
+	private Long equipmentImage2;
+	private Long portfolioPdf;
+	private Long portfolioImage;
+	private Long officeImage;
+
+	@BeforeEach
+	void setUp() {
+		company = saveMember("co-company@test.com", "010-9100-0001", MemberType.COMPANY);
+		companyWithoutPlan = saveMember("co-company2@test.com", "010-9100-0002", MemberType.COMPANY);
+		general = saveMember("co-general@test.com", "010-9100-0003", MemberType.GENERAL);
+		subscriptionRepository.save(Subscription.startPaid(company, BASIC_PLAN, BillingCycle.MONTHLY, LocalDate.now()));
+
+		logo = saveFile(company, FilePurpose.COMPANY_LOGO, "image/png");
+		background = saveFile(company, FilePurpose.COMPANY_BACKGROUND, "image/png");
+		equipmentImage1 = saveFile(company, FilePurpose.COMPANY_EQUIPMENT, "image/png");
+		equipmentImage2 = saveFile(company, FilePurpose.COMPANY_EQUIPMENT, "image/jpeg");
+		portfolioPdf = saveFile(company, FilePurpose.COMPANY_PORTFOLIO, "application/pdf");
+		portfolioImage = saveFile(company, FilePurpose.COMPANY_PORTFOLIO, "image/png");
+		officeImage = saveFile(company, FilePurpose.COMPANY_IMAGE, "image/png");
+	}
+
+	@AfterEach
+	void cleanUp() {
+		companyImageRepository.deleteAllInBatch();
+		companyEquipmentRepository.deleteAllInBatch();
+		companyCertificationRepository.deleteAllInBatch();
+		companyCategoryRepository.deleteAllInBatch();
+		companyRepository.deleteAllInBatch();
+		fileRepository.deleteAllInBatch();
+		subscriptionRepository.deleteAllInBatch();
+		memberRepository.deleteAllInBatch();
+	}
+
+	@Test
+	void 등록하면_업체와_카테고리_인증_설비_사진이_요청_순서대로_저장된다() throws Exception {
+		Number companyId = JsonPath.read(register(company, fullBody())
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.success").value(true))
+			.andReturn().getResponse().getContentAsString(), "$.data.companyId");
+
+		Company saved = companyRepository.findById(companyId.longValue()).orElseThrow();
+		assertThat(saved.getMemberId()).isEqualTo(company);
+		assertThat(saved.getName()).isEqualTo("팩허브 팩토리");
+		assertThat(saved.getIndustry()).isEqualTo("그라비아 연포장");
+		assertThat(saved.getProducts()).isEqualTo("스탠딩파우치, 지퍼파우치");
+		assertThat(saved.getFoundedDate()).isEqualTo(LocalDate.of(2015, 3, 2));
+		assertThat(saved.getEmployeeCount()).isEqualTo(12);
+		assertThat(saved.getHomepageUrl()).isNull();
+		assertThat(saved.getLogoFileId()).isEqualTo(logo);
+		assertThat(saved.getBackgroundFileId()).isEqualTo(background);
+		assertThat(saved.getViewCount()).isZero();
+		assertThat(saved.getVisibility()).isEqualTo(CompanyVisibility.VISIBLE);
+		assertThat(saved.getDeletedAt()).isNull();
+
+		assertThat(companyCategoryRepository.findAll())
+			.extracting(CompanyCategory::getCompanyId, CompanyCategory::getCategoryId)
+			.containsExactly(tuple(saved.getCompanyId(), SUB_CATEGORY));
+
+		// 요청은 HACCP, ISO_9001, HACCP. 중복은 한 번만 저장한다
+		assertThat(sorted(companyCertificationRepository.findAll(), CompanyCertification::getSortOrder))
+			.extracting(CompanyCertification::getCertType, CompanyCertification::getSortOrder,
+				CompanyCertification::getImageFileId)
+			.containsExactly(tuple(CertificationType.HACCP, 1, null), tuple(CertificationType.ISO_9001, 2, null));
+
+		assertThat(sorted(companyEquipmentRepository.findAll(), CompanyEquipment::getSortOrder))
+			.extracting(CompanyEquipment::getName, CompanyEquipment::getImageFileId, CompanyEquipment::getSortOrder)
+			.containsExactly(tuple("그라비아 인쇄기", equipmentImage1, 1), tuple("드라이 라미네이터", equipmentImage2, 2));
+
+		assertThat(sorted(imagesOf(CompanyImageType.PORTFOLIO), CompanyImage::getSortOrder))
+			.extracting(CompanyImage::getFileId, CompanyImage::getSortOrder)
+			.containsExactly(tuple(portfolioPdf, 1), tuple(portfolioImage, 2));
+		assertThat(imagesOf(CompanyImageType.OFFICE))
+			.extracting(CompanyImage::getFileId, CompanyImage::getSortOrder)
+			.containsExactly(tuple(officeImage, 1));
+	}
+
+	@Test
+	void 선택_항목을_보내지_않아도_등록된다() throws Exception {
+		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
+
+		assertThat(companyRepository.count()).isEqualTo(1);
+		assertThat(companyCategoryRepository.count()).isEqualTo(1);
+		assertThat(companyCertificationRepository.count()).isZero();
+		assertThat(companyEquipmentRepository.count()).isZero();
+		assertThat(companyImageRepository.count()).isZero();
+	}
+
+	@Test
+	void 일반회원은_등록할_수_없다() throws Exception {
+		register(general, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 이용권이_없는_기업회원은_등록할_수_없다() throws Exception {
+		register(companyWithoutPlan, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("SUBSCRIPTION_REQUIRED"));
+	}
+
+	@Test
+	void 이미_등록한_업체가_있으면_409() throws Exception {
+		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
+
+		register(company, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isConflict())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_ALREADY_EXISTS"));
+		assertThat(companyRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void 대분류는_카테고리로_고를_수_없다() throws Exception {
+		register(company, minimalBody(PARENT_CATEGORY))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY"));
+	}
+
+	@Test
+	void 없는_카테고리는_400() throws Exception {
+		register(company, minimalBody(999_999L))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY"));
+	}
+
+	@Test
+	void 목록에_없는_인증_코드는_400() throws Exception {
+		register(company, fullBody().replace("\"ISO_9001\"", "\"NOT_A_CERT\""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
+	void 설비에_사진이_없으면_400() throws Exception {
+		register(company, fullBody().replace(",\"imageFileId\":" + equipmentImage2, ""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
+	void 설비는_20개까지만_받는다() throws Exception {
+		String tooMany = IntStream.rangeClosed(1, 21)
+			.mapToObj(i -> "{\"name\":\"설비 %d\",\"imageFileId\":%d}".formatted(i, equipmentImage1))
+			.collect(Collectors.joining(",", "\"equipments\":[", "]"));
+
+		register(company, minimalBody(SUB_CATEGORY).replace("\"employeeCount\":12", "\"employeeCount\":12," + tooMany))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
+	void 직원_수는_필수다() throws Exception {
+		register(company, minimalBody(SUB_CATEGORY).replace(",\"employeeCount\":12", ""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"))
+			.andExpect(jsonPath("$.error.fieldErrors[0].field").value("employeeCount"));
+	}
+
+	@Test
+	void 남이_올린_파일은_쓸_수_없다() throws Exception {
+		Long othersLogo = saveFile(companyWithoutPlan, FilePurpose.COMPANY_LOGO, "image/png");
+
+		register(company, fullBody().replace("\"logoFileId\":" + logo, "\"logoFileId\":" + othersLogo))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("FILE_ACCESS_DENIED"));
+	}
+
+	@Test
+	void 다른_용도로_올린_파일은_쓸_수_없다() throws Exception {
+		// 업체 사진 자리에 로고용으로 올린 파일을 넣는다
+		register(company, fullBody().replace("\"officeFileIds\":[" + officeImage, "\"officeFileIds\":[" + logo))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("FILE_PURPOSE_MISMATCH"));
+	}
+
+	@Test
+	void 없는_파일이면_404이고_아무것도_저장하지_않는다() throws Exception {
+		register(company, fullBody().replace("\"backgroundFileId\":" + background, "\"backgroundFileId\":999999"))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("FILE_NOT_FOUND"));
+
+		assertThat(companyRepository.count()).isZero();
+		assertThat(companyCategoryRepository.count()).isZero();
+	}
+
+	@Test
+	void 토큰이_없으면_401() throws Exception {
+		mockMvc.perform(post("/api/v1/companies")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(minimalBody(SUB_CATEGORY)))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+	}
+
+	@Test
+	void 분류_목록은_로그인_없이_대분류_37개와_소분류를_순서대로_반환한다() throws Exception {
+		mockMvc.perform(get("/api/v1/categories").param("domain", "COMMON"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.length()").value(37))
+			.andExpect(jsonPath("$.data[0].categoryId").value(100))
+			.andExpect(jsonPath("$.data[0].name").value("연포장·파우치"))
+			.andExpect(jsonPath("$.data[0].children.length()").value(10))
+			.andExpect(jsonPath("$.data[0].children[0].categoryId").value(101))
+			.andExpect(jsonPath("$.data[0].children[0].name").value("삼방봉투"))
+			.andExpect(jsonPath("$.data[0].children[9].name").value("자동포장용 롤필름"))
+			.andExpect(jsonPath("$.data[36].categoryId").value(3700))
+			.andExpect(jsonPath("$.data[36].name").value("디자인·개발·시험·설비서비스"))
+			.andExpect(jsonPath("$.data[36].children.length()").value(17));
+	}
+
+	@Test
+	void 아직_넣지_않은_사용처의_분류_목록은_비어_있다() throws Exception {
+		mockMvc.perform(get("/api/v1/categories").param("domain", "JOB"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.length()").value(0));
+	}
+
+	@Test
+	void 분류_목록에_없는_사용처를_보내면_400() throws Exception {
+		mockMvc.perform(get("/api/v1/categories").param("domain", "COMPANY"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
+	void 보유_인증_목록은_로그인_없이_35개를_코드와_표시명으로_반환한다() throws Exception {
+		mockMvc.perform(get("/api/v1/certification-types"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.length()").value(35))
+			.andExpect(jsonPath("$.data[0].code").value("ISO_9001"))
+			.andExpect(jsonPath("$.data[0].label").value("품질경영 인증(ISO 9001)"))
+			.andExpect(jsonPath("$.data[0].description").value("품질·공정 관리체계"))
+			.andExpect(jsonPath("$.data[34].code").value("KOLAS"));
+	}
+
+	private ResultActions register(long memberId, String body) throws Exception {
+		return mockMvc.perform(post("/api/v1/companies")
+			.header(HttpHeaders.AUTHORIZATION, bearer(memberId))
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(body));
+	}
+
+	/** 필수값만 채운 요청. 홈페이지·로고·인증·설비·사진은 보내지 않는다 */
+	private String minimalBody(long categoryId) {
+		return """
+			{"name":"팩허브 팩토리","industry":"그라비아 연포장","products":"스탠딩파우치, 지퍼파우치","categoryId":%d,\
+			"businessHours":"09:00 - 18:00","contactPhone":"02-1234-5678","address":"경기 안산시 단원구 1",\
+			"representativeName":"홍길동","foundedDate":"2015-03-02","description":"연포장 전문 업체입니다.","employeeCount":12}\
+			""".formatted(categoryId);
+	}
+
+	/** 선택 항목까지 모두 채운 요청. 인증은 일부러 HACCP을 두 번 넣는다 */
+	private String fullBody() {
+		String optional = """
+			,"addressDetail":"2층","logoFileId":%d,"backgroundFileId":%d,"certTypes":["HACCP","ISO_9001","HACCP"],\
+			"equipments":[{"name":"그라비아 인쇄기","imageFileId":%d},{"name":"드라이 라미네이터","imageFileId":%d}],\
+			"portfolioFileIds":[%d,%d],"officeFileIds":[%d]}\
+			""".formatted(logo, background, equipmentImage1, equipmentImage2, portfolioPdf, portfolioImage, officeImage);
+		String minimal = minimalBody(SUB_CATEGORY);
+		return minimal.substring(0, minimal.lastIndexOf('}')) + optional;
+	}
+
+	private List<CompanyImage> imagesOf(CompanyImageType imageType) {
+		return companyImageRepository.findAll().stream()
+			.filter(image -> image.getImageType() == imageType)
+			.toList();
+	}
+
+	private <T> List<T> sorted(List<T> rows, java.util.function.ToIntFunction<T> sortOrder) {
+		return rows.stream().sorted(Comparator.comparingInt(sortOrder)).toList();
+	}
+
+	private String bearer(long memberId) {
+		return "Bearer " + jwtProvider.createAccessToken(memberId, "USER");
+	}
+
+	private Long saveMember(String email, String phone, MemberType memberType) {
+		return memberRepository.save(Member.signUp(email, "{noop}password", "테스트", phone, memberType)).getMemberId();
+	}
+
+	/** S3에 올리지 않고 File 행만 만든다. 저장 키는 실제 규칙({용도 폴더}/{회원 ID}/{UUID}.{확장자})을 따른다 */
+	private Long saveFile(Long uploaderId, FilePurpose purpose, String contentType) {
+		String extension = contentType.substring(contentType.indexOf('/') + 1);
+		String storageKey = purpose.getFolder() + "/" + uploaderId + "/" + UUID.randomUUID() + "." + extension;
+		return fileRepository.save(File.register(uploaderId, "원본." + extension, storageKey, contentType, 1024))
+			.getFileId();
+	}
+}

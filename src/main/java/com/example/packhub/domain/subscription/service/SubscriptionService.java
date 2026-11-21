@@ -107,6 +107,11 @@ public class SubscriptionService {
 			.orElse(null);
 	}
 
+	/** 이용 기간이 남은 이용권이 있는지. 업체 등록처럼 이용권이 있어야 쓸 수 있는 기능에서 확인한다 */
+	public boolean hasSubscriptionInUse(Long memberId) {
+		return subscriptionRepository.existsByMemberIdAndStatusIn(memberId, IN_USE);
+	}
+
 	private Plan getPayablePlan(Long planId) {
 		Plan plan = planRepository.findById(planId)
 			.filter(Plan::isActive)
@@ -118,7 +123,7 @@ public class SubscriptionService {
 	}
 
 	private void validateNoSubscriptionInUse(Long memberId) {
-		if (subscriptionRepository.existsByMemberIdAndStatusIn(memberId, IN_USE)) {
+		if (hasSubscriptionInUse(memberId)) {
 			throw new BusinessException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
 		}
 	}

@@ -17,6 +17,7 @@ public enum FilePurpose {
 	COMPANY_LOGO("company-logo", Kind.IMAGE),
 	COMPANY_BACKGROUND("company-background", Kind.IMAGE),
 	COMPANY_IMAGE("company-image", Kind.IMAGE),
+	COMPANY_PORTFOLIO("company-portfolio", Kind.DOCUMENT),
 	COMPANY_EQUIPMENT("company-equipment", Kind.IMAGE),
 	COMPANY_CERTIFICATION("company-certification", Kind.IMAGE),
 	POST_IMAGE("post-image", Kind.IMAGE),
