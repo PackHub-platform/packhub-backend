@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.packhub.TestcontainersConfiguration;
+import com.example.packhub.domain.member.entity.Member;
+import com.example.packhub.domain.member.entity.MemberType;
+import com.example.packhub.domain.member.repository.MemberRepository;
 import com.example.packhub.domain.subscription.entity.Payment;
 import com.example.packhub.domain.subscription.entity.PaymentStatus;
 import com.example.packhub.domain.subscription.repository.PartnerConsultationRepository;
@@ -17,6 +20,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -51,18 +55,34 @@ class SubscriptionApiTest {
 	private PartnerConsultationRepository partnerConsultationRepository;
 
 	@Autowired
+	private MemberRepository memberRepository;
+
+	@Autowired
 	private JwtProvider jwtProvider;
+
+	/** 결제·상담은 기업회원만 할 수 있어서 테스트마다 회원을 실제로 저장한다 */
+	private Long company;
+	private Long otherCompany;
+	private Long general;
+
+	@BeforeEach
+	void setUp() {
+		company = saveMember("sub-company@test.com", "010-9000-0001", MemberType.COMPANY);
+		otherCompany = saveMember("sub-company2@test.com", "010-9000-0002", MemberType.COMPANY);
+		general = saveMember("sub-general@test.com", "010-9000-0003", MemberType.GENERAL);
+	}
 
 	@AfterEach
 	void cleanUp() {
 		paymentRepository.deleteAllInBatch();
 		subscriptionRepository.deleteAllInBatch();
 		partnerConsultationRepository.deleteAllInBatch();
+		memberRepository.deleteAllInBatch();
 	}
 
 	@Test
 	void 플랜_목록은_기초_데이터_3개를_순서대로_반환한다() throws Exception {
-		mockMvc.perform(get("/api/v1/plans"))
+		mockMvc.perform(get("/api/v1/plans").header(HttpHeaders.AUTHORIZATION, bearer(general)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.length()").value(3))
 			.andExpect(jsonPath("$.data[0].code").value("BASIC"))
@@ -74,7 +94,7 @@ class SubscriptionApiTest {
 
 	@Test
 	void 결제_요청은_결제_대기_주문을_저장하고_금액과_주문번호를_반환한다() throws Exception {
-		String orderNo = orderNo(order(1L, BASIC, "YEARLY", true)
+		String orderNo = orderNo(order(company, BASIC, "YEARLY", true)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.planName").value("PackHub Basic"))
 			.andExpect(jsonPath("$.data.billingCycle").value("YEARLY"))
@@ -82,7 +102,7 @@ class SubscriptionApiTest {
 
 		Payment saved = findPayment(orderNo);
 		assertThat(saved.getStatus()).isEqualTo(PaymentStatus.PENDING);
-		assertThat(saved.getMemberId()).isEqualTo(1L);
+		assertThat(saved.getMemberId()).isEqualTo(company);
 		assertThat(saved.getAmount()).isEqualTo(290000L);
 		assertThat(saved.getSubscriptionId()).isNull();
 	}
@@ -91,27 +111,27 @@ class SubscriptionApiTest {
 	void 주문번호는_오늘_날짜와_000001부터_이어지는_번호다() throws Exception {
 		String today = "PH-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
 
-		assertThat(orderNo(order(1L, BASIC, "MONTHLY", true))).isEqualTo(today + "000001");
-		assertThat(orderNo(order(2L, BASIC, "MONTHLY", true))).isEqualTo(today + "000002");
+		assertThat(orderNo(order(company, BASIC, "MONTHLY", true))).isEqualTo(today + "000001");
+		assertThat(orderNo(order(otherCompany, BASIC, "MONTHLY", true))).isEqualTo(today + "000002");
 	}
 
 	@Test
 	void 파트너_플랜은_결제할_수_없다() throws Exception {
-		order(1L, PARTNER, "MONTHLY", true)
+		order(company, PARTNER, "MONTHLY", true)
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.error.code").value("CONSULT_ONLY_PLAN"));
 	}
 
 	@Test
 	void 필수_동의를_하지_않으면_결제_요청이_실패한다() throws Exception {
-		order(1L, BASIC, "MONTHLY", false)
+		order(company, BASIC, "MONTHLY", false)
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
 	}
 
 	@Test
 	void 없는_플랜은_404() throws Exception {
-		order(1L, 999L, "MONTHLY", true)
+		order(company, 999L, "MONTHLY", true)
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.error.code").value("PLAN_NOT_FOUND"));
 	}
@@ -125,7 +145,7 @@ class SubscriptionApiTest {
 
 	@Test
 	void 이용권이_없으면_현재_이용권_조회의_data가_없다() throws Exception {
-		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(1L)))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data").doesNotExist());
@@ -134,9 +154,9 @@ class SubscriptionApiTest {
 	@Test
 	void 결제_승인_후_현재_이용권에_ACTIVE로_조회된다() throws Exception {
 		LocalDate today = LocalDate.now();
-		String orderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
+		String orderNo = orderNo(order(company, BASIC, "MONTHLY", true));
 
-		confirm(1L, orderNo)
+		confirm(company, orderNo)
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.orderNo").value(orderNo))
 			.andExpect(jsonPath("$.data.amount").value(29000))
@@ -148,7 +168,7 @@ class SubscriptionApiTest {
 		assertThat(paid.getStatus()).isEqualTo(PaymentStatus.PAID);
 		assertThat(paid.getSubscriptionId()).isNotNull();
 
-		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(1L)))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.status").value("ACTIVE"))
 			.andExpect(jsonPath("$.data.plan.code").value("BASIC"))
@@ -163,11 +183,11 @@ class SubscriptionApiTest {
 
 	@Test
 	void 최근_결제_내역에는_결제_대기_주문이_보이지_않는다() throws Exception {
-		order(1L, BASIC, "MONTHLY", true);                         // 결제창을 닫아 대기로 남은 주문
-		String paidOrderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
-		confirm(1L, paidOrderNo).andExpect(status().isOk());
+		order(company, BASIC, "MONTHLY", true);                         // 결제창을 닫아 대기로 남은 주문
+		String paidOrderNo = orderNo(order(company, BASIC, "MONTHLY", true));
+		confirm(company, paidOrderNo).andExpect(status().isOk());
 
-		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(1L)))
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.recentPayments.length()").value(1))
 			.andExpect(jsonPath("$.data.recentPayments[0].orderNo").value(paidOrderNo))
@@ -176,36 +196,36 @@ class SubscriptionApiTest {
 
 	@Test
 	void 이용권이_있으면_다시_결제할_수_없다() throws Exception {
-		String first = orderNo(order(1L, BASIC, "MONTHLY", true));
-		String second = orderNo(order(1L, BASIC, "MONTHLY", true));
-		confirm(1L, first).andExpect(status().isOk());
+		String first = orderNo(order(company, BASIC, "MONTHLY", true));
+		String second = orderNo(order(company, BASIC, "MONTHLY", true));
+		confirm(company, first).andExpect(status().isOk());
 
-		order(1L, BASIC, "MONTHLY", true)
+		order(company, BASIC, "MONTHLY", true)
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.error.code").value("SUBSCRIPTION_ALREADY_ACTIVE"));
-		confirm(1L, second)
+		confirm(company, second)
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.error.code").value("SUBSCRIPTION_ALREADY_ACTIVE"));
 	}
 
 	@Test
 	void 이미_처리된_주문은_다시_승인할_수_없다() throws Exception {
-		String orderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
-		confirm(1L, orderNo).andExpect(status().isOk());
+		String orderNo = orderNo(order(company, BASIC, "MONTHLY", true));
+		confirm(company, orderNo).andExpect(status().isOk());
 
-		confirm(1L, orderNo)
+		confirm(company, orderNo)
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.error.code").value("ORDER_ALREADY_PROCESSED"));
 	}
 
 	@Test
 	void 다른_회원의_주문과_없는_주문은_404() throws Exception {
-		String orderNo = orderNo(order(1L, BASIC, "MONTHLY", true));
+		String orderNo = orderNo(order(company, BASIC, "MONTHLY", true));
 
-		confirm(2L, orderNo)
+		confirm(otherCompany, orderNo)
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.error.code").value("ORDER_NOT_FOUND"));
-		confirm(1L, "PH-20000101-000001")
+		confirm(company, "PH-20000101-000001")
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.error.code").value("ORDER_NOT_FOUND"));
 	}
@@ -213,7 +233,7 @@ class SubscriptionApiTest {
 	@Test
 	void 파트너_상담을_신청하면_201과_ID를_반환한다() throws Exception {
 		mockMvc.perform(post("/api/v1/partner-consultations")
-				.header(HttpHeaders.AUTHORIZATION, bearer(1L))
+				.header(HttpHeaders.AUTHORIZATION, bearer(company))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{"companyName":"팩허브포장","managerName":"홍길동","phone":"010-1234-5678",
@@ -226,7 +246,7 @@ class SubscriptionApiTest {
 	@Test
 	void 파트너_상담은_개인정보_동의와_이메일_형식이_필요하다() throws Exception {
 		mockMvc.perform(post("/api/v1/partner-consultations")
-				.header(HttpHeaders.AUTHORIZATION, bearer(1L))
+				.header(HttpHeaders.AUTHORIZATION, bearer(company))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{"companyName":"팩허브포장","managerName":"홍길동","phone":"010-1234-5678",
@@ -234,6 +254,57 @@ class SubscriptionApiTest {
 					"""))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.error.fieldErrors.length()").value(2));
+	}
+
+	@Test
+	void 플랜_목록은_토큰이_없으면_401() throws Exception {
+		mockMvc.perform(get("/api/v1/plans"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
+	}
+
+	@Test
+	void 일반회원은_결제를_요청할_수_없다() throws Exception {
+		order(general, BASIC, "MONTHLY", true)
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 일반회원은_결제를_승인할_수_없다() throws Exception {
+		String orderNo = orderNo(order(company, BASIC, "MONTHLY", true));
+
+		confirm(general, orderNo)
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 일반회원은_파트너_상담을_신청할_수_없다() throws Exception {
+		mockMvc.perform(post("/api/v1/partner-consultations")
+				.header(HttpHeaders.AUTHORIZATION, bearer(general))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{"companyName":"팩허브포장","managerName":"홍길동","phone":"010-1234-5678",
+					 "email":"contact@example.com","content":"맞춤 견적 상담 원합니다.","privacyAgreed":true}
+					"""))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 일반회원의_현재_이용권_조회는_data가_없다() throws Exception {
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(general)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data").doesNotExist());
+	}
+
+	@Test
+	void 토큰_속_회원이_없으면_401() throws Exception {
+		order(999_999L, BASIC, "MONTHLY", true)
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.error.code").value("UNAUTHORIZED"));
 	}
 
 	private ResultActions order(long memberId, long planId, String billingCycle, boolean agreed) throws Exception {
@@ -257,6 +328,10 @@ class SubscriptionApiTest {
 	/** 로그인이 필요한 API라 회원 토큰을 붙인다. 컨트롤러는 토큰 속 회원 ID(@CurrentMember)를 쓴다 */
 	private String bearer(long memberId) {
 		return "Bearer " + jwtProvider.createAccessToken(memberId, "USER");
+	}
+
+	private Long saveMember(String email, String phone, MemberType memberType) {
+		return memberRepository.save(Member.signUp(email, "{noop}password", "테스트", phone, memberType)).getMemberId();
 	}
 
 	private Payment findPayment(String orderNo) {
