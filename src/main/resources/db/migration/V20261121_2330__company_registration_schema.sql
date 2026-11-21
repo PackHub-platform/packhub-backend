@@ -6,6 +6,11 @@ ALTER TABLE `Company`
 	MODIFY COLUMN `employeeCount` INT NOT NULL COMMENT '직원 수(규모순 정렬)',
 	MODIFY COLUMN `homepageUrl` VARCHAR(255) NULL;
 
+-- 기업회원당 업체 1개. 동시에 등록 요청이 와도 DB가 막는다.
+-- 삭제한 업체(deletedAt이 있는 행)는 값이 NULL이 되어 검사에서 빠지므로 다시 등록할 수 있다
+CREATE UNIQUE INDEX `UK_COMPANY_ACTIVE_MEMBER`
+	ON `Company` ((IF(`deletedAt` IS NULL, `memberId`, NULL)));
+
 -- 보유 인증: 인증명을 직접 적지 않고 정해진 목록(CertificationType)에서 고른다. 개수 제한은 없다
 ALTER TABLE `CompanyCertification`
 	DROP COLUMN `name`,

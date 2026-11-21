@@ -1,6 +1,7 @@
 package com.example.packhub.domain.company;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -36,6 +37,11 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
@@ -45,8 +51,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -93,6 +101,9 @@ class CompanyApiTest {
 
 	@Autowired
 	private JwtProvider jwtProvider;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	/** 이용권을 이용 중인 기업회원 */
 	private Long company;
@@ -212,6 +223,73 @@ class CompanyApiTest {
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.error.code").value("COMPANY_ALREADY_EXISTS"));
 		assertThat(companyRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void 같은_회원이_동시에_두_번_등록해도_업체는_하나만_생긴다() throws Exception {
+		CountDownLatch start = new CountDownLatch(1);
+		Callable<Integer> request = () -> {
+			start.await();
+			return register(company, minimalBody(SUB_CATEGORY)).andReturn().getResponse().getStatus();
+		};
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			Future<Integer> first = executor.submit(request);
+			Future<Integer> second = executor.submit(request);
+			start.countDown();
+
+			assertThat(List.of(first.get(), second.get())).containsExactlyInAnyOrder(201, 409);
+		} finally {
+			executor.shutdownNow();
+		}
+		assertThat(companyRepository.count()).isEqualTo(1);
+		assertThat(companyCategoryRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void 코드의_확인을_거치지_않아도_DB가_회원당_업체_1개를_막는다() throws Exception {
+		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
+
+		// 등록된 업체 행을 그대로 한 번 더 넣는다. 서비스는 이 제약 이름을 보고 409로 바꾼다
+		assertThatThrownBy(() -> jdbcTemplate.update("""
+			INSERT INTO `Company` (`memberId`, `name`, `industry`, `products`, `businessHours`, `contactPhone`,
+				`address`, `representativeName`, `foundedDate`, `employeeCount`, `description`, `visibility`)
+			SELECT `memberId`, `name`, `industry`, `products`, `businessHours`, `contactPhone`,
+				`address`, `representativeName`, `foundedDate`, `employeeCount`, `description`, `visibility`
+			FROM `Company` WHERE `memberId` = ?
+			""", company))
+			.isInstanceOf(DuplicateKeyException.class)
+			.hasMessageContaining("UK_COMPANY_ACTIVE_MEMBER");
+	}
+
+	@Test
+	void 업체를_삭제한_뒤에는_다시_등록할_수_있다() throws Exception {
+		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
+		jdbcTemplate.update("UPDATE `Company` SET `deletedAt` = NOW() WHERE `memberId` = ?", company);
+
+		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
+		assertThat(companyRepository.count()).isEqualTo(2);
+	}
+
+	@Test
+	void 기간이_끝난_이용권으로는_등록할_수_없다() throws Exception {
+		Long expired = saveMember("co-expired@test.com", "010-9100-0004", MemberType.COMPANY);
+		subscriptionRepository.save(
+			Subscription.startPaid(expired, BASIC_PLAN, BillingCycle.MONTHLY, LocalDate.now().minusMonths(2)));
+
+		register(expired, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("SUBSCRIPTION_REQUIRED"));
+	}
+
+	@Test
+	void 이용권_종료일_당일까지는_등록할_수_있다() throws Exception {
+		Long lastDay = saveMember("co-lastday@test.com", "010-9100-0005", MemberType.COMPANY);
+		// 한 달 전 내일 시작한 월 결제는 오늘이 종료일이다
+		subscriptionRepository.save(Subscription.startPaid(lastDay, BASIC_PLAN, BillingCycle.MONTHLY,
+			LocalDate.now().plusDays(1).minusMonths(1)));
+
+		register(lastDay, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
 	}
 
 	@Test

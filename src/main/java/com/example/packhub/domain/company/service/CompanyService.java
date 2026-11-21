@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class CompanyService {
+
+	/** 기업회원당 업체 1개를 막는 DB 제약 이름 (V20261121_2330 마이그레이션) */
+	private static final String ACTIVE_MEMBER_UNIQUE = "UK_COMPANY_ACTIVE_MEMBER";
 
 	private final CompanyRepository companyRepository;
 	private final CompanyCategoryRepository companyCategoryRepository;
@@ -60,13 +64,25 @@ public class CompanyService {
 		categoryService.validateSelectable(request.categoryId(), CategoryDomain.COMMON);
 		validateFiles(memberId, request);
 
-		Long companyId = companyRepository.save(request.toEntity(memberId)).getCompanyId();
+		Long companyId = saveCompany(memberId, request);
 		companyCategoryRepository.save(CompanyCategory.of(companyId, request.categoryId()));
 		saveCertifications(companyId, request.certTypes());
 		saveEquipments(companyId, request.equipments());
 		saveImages(companyId, CompanyImageType.PORTFOLIO, request.portfolioFileIds());
 		saveImages(companyId, CompanyImageType.OFFICE, request.officeFileIds());
 		return new CompanyCreateResponse(companyId);
+	}
+
+	/** 동시에 들어온 등록 요청이 먼저 저장했으면 DB의 회원당 1개 제약에 걸린다. 그 경우만 409로 바꾼다 */
+	private Long saveCompany(Long memberId, CompanyCreateRequest request) {
+		try {
+			return companyRepository.saveAndFlush(request.toEntity(memberId)).getCompanyId();
+		} catch (DataIntegrityViolationException e) {
+			if (String.valueOf(e.getMostSpecificCause().getMessage()).contains(ACTIVE_MEMBER_UNIQUE)) {
+				throw new BusinessException(ErrorCode.COMPANY_ALREADY_EXISTS);
+			}
+			throw e;
+		}
 	}
 
 	/** 본인이 올린 파일인지, 자리에 맞는 용도로 올린 파일인지 확인한다 */
