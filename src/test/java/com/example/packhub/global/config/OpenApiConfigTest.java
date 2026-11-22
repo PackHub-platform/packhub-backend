@@ -37,6 +37,14 @@ class OpenApiConfigTest {
 	}
 
 	@Test
+	void 인증_API_중_로그아웃만_Authorize_토큰을_쓴다() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.paths['/api/v1/auth/reissue'].post.security").isEmpty())
+			.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.security[0].bearerAuth").exists());
+	}
+
+	@Test
 	void Swagger_화면은_토큰_없이_열린다() throws Exception {
 		mockMvc.perform(get("/swagger-ui/index.html"))
 			.andExpect(status().isOk());

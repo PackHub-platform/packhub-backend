@@ -23,6 +23,8 @@ public enum ErrorCode {
 	LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
 	MEMBER_SUSPENDED(HttpStatus.FORBIDDEN, "정지된 계정입니다. 고객센터에 문의해 주세요."),
 	MEMBER_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),
+	INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 로그인 정보입니다. 다시 로그인해 주세요."),
+	REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인 기간이 만료되었습니다. 다시 로그인해 주세요."),
 
 	// 이용권·결제
 	COMPANY_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "기업회원만 이용할 수 있습니다."),

@@ -4,13 +4,12 @@ import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.entity.MemberType;
 import com.example.packhub.domain.member.entity.Role;
 
-/**
- * refreshToken·refreshTokenExpiresIn은 재발급·로그아웃 이슈에서 추가한다.
- */
 public record LoginResponse(
 	String accessToken,
+	String refreshToken,
 	String tokenType,
 	long accessTokenExpiresIn,
+	long refreshTokenExpiresIn,
 	MemberSummary member
 ) {
 

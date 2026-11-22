@@ -59,7 +59,7 @@ class SecurityConfigTest {
 
 	@Test
 	void 만료된_토큰이면_401_TOKEN_EXPIRED() throws Exception {
-		String expired = new JwtProvider(new JwtProperties(SECRET, Duration.ofSeconds(-1)))
+		String expired = new JwtProvider(new JwtProperties(SECRET, Duration.ofSeconds(-1), Duration.ofDays(14)))
 			.createAccessToken(12L, "USER");
 
 		mockMvc.perform(get("/api/v1/private").header(HttpHeaders.AUTHORIZATION, "Bearer " + expired))
@@ -70,7 +70,7 @@ class SecurityConfigTest {
 	@Test
 	void 위조된_토큰이면_401_UNAUTHORIZED() throws Exception {
 		String forged = new JwtProvider(
-			new JwtProperties("another-secret-key-that-is-also-32-bytes!!", Duration.ofMinutes(30)))
+			new JwtProperties("another-secret-key-that-is-also-32-bytes!!", Duration.ofMinutes(30), Duration.ofDays(14)))
 			.createAccessToken(12L, "ADMIN");
 
 		mockMvc.perform(get("/api/v1/private").header(HttpHeaders.AUTHORIZATION, "Bearer " + forged))
