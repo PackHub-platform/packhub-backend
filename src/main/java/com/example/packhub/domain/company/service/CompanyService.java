@@ -6,6 +6,9 @@ import com.example.packhub.domain.company.dto.CompanySaveRequest;
 import com.example.packhub.domain.company.dto.CompanyCreateResponse;
 import com.example.packhub.domain.company.dto.CompanyDetailResponse;
 import com.example.packhub.domain.company.dto.CompanyFileResponse;
+import com.example.packhub.domain.company.dto.CompanyPageResponse;
+import com.example.packhub.domain.company.dto.CompanySearchRequest;
+import com.example.packhub.domain.company.dto.CompanySummaryResponse;
 import com.example.packhub.domain.company.entity.CertificationType;
 import com.example.packhub.domain.company.entity.Company;
 import com.example.packhub.domain.company.entity.CompanyCategory;
@@ -35,11 +38,13 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 업체 등록·조회·수정. 등록은 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
+ * 업체 등록·조회·수정·목록 조회. 등록은 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
  * 조회수(Company.viewCount)는 쓰는 화면이 없어 기록하지 않는다 (2026-11-22 결정).
  * TODO(사업자 인증 1-4 머지 후): 사업자 인증 완료 체크 추가.
  */
@@ -77,6 +82,33 @@ public class CompanyService {
 		Long companyId = saveCompany(memberId, request);
 		saveDetails(companyId, request);
 		return new CompanyCreateResponse(companyId);
+	}
+
+	/** 노출 중인 업체 목록. 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다 */
+	public CompanyPageResponse search(CompanySearchRequest request) {
+		boolean allCategories = request.categoryId() == null;
+		List<Long> categoryIds = allCategories ? List.of()
+			: categoryService.findFilterIds(request.categoryId(), CategoryDomain.COMMON);
+		Page<Company> page = companyRepository.search(CompanyVisibility.VISIBLE, likePattern(request.keyword()),
+			allCategories, categoryIds,
+			PageRequest.of(request.page() - 1, request.size(), request.sort().getSort()));
+
+		Map<Long, CompanyFileResponse> logos = toFileResponses(page.getContent().stream()
+			.map(Company::getLogoFileId)
+			.filter(Objects::nonNull)
+			.distinct()
+			.toList());
+		return CompanyPageResponse.of(page, page.getContent().stream()
+			.map(company -> CompanySummaryResponse.of(company, logos.get(company.getLogoFileId())))
+			.toList());
+	}
+
+	/** 검색어의 %, _를 글자 그대로 찾도록 '!'로 이스케이프하고 앞뒤에 %를 붙인다. 검색어가 없으면 null */
+	private String likePattern(String keyword) {
+		if (keyword == null) {
+			return null;
+		}
+		return "%" + keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
 	}
 
 	/** 삭제했거나 숨김 상태인 업체는 404 COMPANY_NOT_FOUND */
@@ -147,6 +179,10 @@ public class CompanyService {
 			.filter(Objects::nonNull)
 			.distinct()
 			.toList();
+		return toFileResponses(fileIds);
+	}
+
+	private Map<Long, CompanyFileResponse> toFileResponses(List<Long> fileIds) {
 		return fileService.findFiles(fileIds).stream()
 			.collect(Collectors.toMap(File::getFileId,
 				file -> CompanyFileResponse.of(file, fileService.viewUrl(file.getStorageKey()))));
