@@ -10,8 +10,10 @@ import com.example.packhub.TestcontainersConfiguration;
 import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.entity.MemberType;
 import com.example.packhub.domain.member.repository.MemberRepository;
+import com.example.packhub.domain.subscription.entity.BillingCycle;
 import com.example.packhub.domain.subscription.entity.Payment;
 import com.example.packhub.domain.subscription.entity.PaymentStatus;
+import com.example.packhub.domain.subscription.entity.Subscription;
 import com.example.packhub.domain.subscription.repository.PartnerConsultationRepository;
 import com.example.packhub.domain.subscription.repository.PaymentRepository;
 import com.example.packhub.domain.subscription.repository.SubscriptionRepository;
@@ -293,6 +295,23 @@ class SubscriptionApiTest {
 	}
 
 	@Test
+	void 이용_기간이_끝난_이용권은_이용_중으로_보지_않아_다시_결제할_수_있다() throws Exception {
+		saveExpiredSubscription(company);
+
+		String orderNo = orderNo(order(company, BASIC, "MONTHLY", true).andExpect(status().isOk()));
+		confirm(company, orderNo).andExpect(status().isOk());
+	}
+
+	@Test
+	void 이용_기간이_끝난_이용권은_현재_이용권_조회에_나오지_않는다() throws Exception {
+		saveExpiredSubscription(company);
+
+		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data").doesNotExist());
+	}
+
+	@Test
 	void 일반회원의_현재_이용권_조회는_data가_없다() throws Exception {
 		mockMvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, bearer(general)))
 			.andExpect(status().isOk())
@@ -328,6 +347,12 @@ class SubscriptionApiTest {
 	/** 로그인이 필요한 API라 회원 토큰을 붙인다. 컨트롤러는 토큰 속 회원 ID(@CurrentMember)를 쓴다 */
 	private String bearer(long memberId) {
 		return "Bearer " + jwtProvider.createAccessToken(memberId, "USER");
+	}
+
+	/** 두 달 전에 시작한 월 결제 이용권. 종료일이 한 달쯤 전이고, 만료 처리가 없어 상태는 ACTIVE로 남아 있다 */
+	private void saveExpiredSubscription(Long memberId) {
+		subscriptionRepository.save(
+			Subscription.startPaid(memberId, BASIC, BillingCycle.MONTHLY, LocalDate.now().minusMonths(2)));
 	}
 
 	private Long saveMember(String email, String phone, MemberType memberType) {

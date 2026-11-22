@@ -39,7 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class SubscriptionService {
 
-	/** 아직 이용 기간이 남아 있는 상태. 이 상태의 이용권이 있으면 새로 결제할 수 없다. */
+	/**
+	 * 이용 중으로 보는 상태. 이 상태이면서 종료일(currentPeriodEnd)이 오늘 이후인 이용권이 있으면 새로 결제할 수 없다.
+	 * 종료일 당일까지 이용할 수 있다 (다음 결제일이 종료일 다음 날).
+	 * TODO(기말): 기간이 끝난 이용권의 상태를 EXPIRED로 바꾸는 처리(자동결제와 함께). 지금은 상태가 ACTIVE로 남는다.
+	 */
 	private static final List<SubscriptionStatus> IN_USE = List.of(SubscriptionStatus.ACTIVE,
 		SubscriptionStatus.CANCEL_SCHEDULED);
 	private static final String MOCK_METHOD_SUMMARY = "테스트 결제";
@@ -99,12 +103,19 @@ public class SubscriptionService {
 
 	/** 이용 중인 이용권이 없으면 null을 돌려준다. 최근 결제 내역에는 결제 완료(PAID) 건만 보여 준다. */
 	public MySubscriptionResponse getMySubscription(Long memberId) {
-		return subscriptionRepository.findFirstByMemberIdAndStatusIn(memberId, IN_USE)
+		return subscriptionRepository
+			.findFirstByMemberIdAndStatusInAndCurrentPeriodEndGreaterThanEqual(memberId, IN_USE, LocalDate.now())
 			.map(subscription -> MySubscriptionResponse.of(
 				subscription,
 				planRepository.findById(subscription.getPlanId()).orElseThrow(),
 				paymentRepository.findTop5ByMemberIdAndStatusOrderByPaymentIdDesc(memberId, PaymentStatus.PAID)))
 			.orElse(null);
+	}
+
+	/** 이용 기간이 남은(종료일이 오늘 이후인) 이용권이 있는지. 업체 등록처럼 이용권이 있어야 쓸 수 있는 기능에서 확인한다 */
+	public boolean hasSubscriptionInUse(Long memberId) {
+		return subscriptionRepository.existsByMemberIdAndStatusInAndCurrentPeriodEndGreaterThanEqual(memberId, IN_USE,
+			LocalDate.now());
 	}
 
 	private Plan getPayablePlan(Long planId) {
@@ -118,7 +129,7 @@ public class SubscriptionService {
 	}
 
 	private void validateNoSubscriptionInUse(Long memberId) {
-		if (subscriptionRepository.existsByMemberIdAndStatusIn(memberId, IN_USE)) {
+		if (hasSubscriptionInUse(memberId)) {
 			throw new BusinessException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
 		}
 	}
