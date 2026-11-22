@@ -2,7 +2,7 @@ package com.example.packhub.domain.company.service;
 
 import com.example.packhub.domain.category.entity.CategoryDomain;
 import com.example.packhub.domain.category.service.CategoryService;
-import com.example.packhub.domain.company.dto.CompanyCreateRequest;
+import com.example.packhub.domain.company.dto.CompanySaveRequest;
 import com.example.packhub.domain.company.dto.CompanyCreateResponse;
 import com.example.packhub.domain.company.dto.CompanyDetailResponse;
 import com.example.packhub.domain.company.dto.CompanyFileResponse;
@@ -39,7 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 업체 등록·상세 조회. 등록은 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
+ * 업체 등록·조회·수정. 등록은 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
  * 조회수(Company.viewCount)는 쓰는 화면이 없어 기록하지 않는다 (2026-11-22 결정).
  * TODO(사업자 인증 1-4 머지 후): 사업자 인증 완료 체크 추가.
  */
@@ -63,7 +63,7 @@ public class CompanyService {
 	private final FileService fileService;
 
 	@Transactional
-	public CompanyCreateResponse register(Long memberId, CompanyCreateRequest request) {
+	public CompanyCreateResponse register(Long memberId, CompanySaveRequest request) {
 		companyMemberValidator.validate(memberId);
 		if (!subscriptionService.hasSubscriptionInUse(memberId)) {
 			throw new BusinessException(ErrorCode.SUBSCRIPTION_REQUIRED);
@@ -75,11 +75,7 @@ public class CompanyService {
 		validateFiles(memberId, request);
 
 		Long companyId = saveCompany(memberId, request);
-		companyCategoryRepository.save(CompanyCategory.of(companyId, request.categoryId()));
-		saveCertifications(companyId, request.certTypes());
-		saveEquipments(companyId, request.equipments());
-		saveImages(companyId, CompanyImageType.PORTFOLIO, request.portfolioFileIds());
-		saveImages(companyId, CompanyImageType.OFFICE, request.officeFileIds());
+		saveDetails(companyId, request);
 		return new CompanyCreateResponse(companyId);
 	}
 
@@ -88,6 +84,40 @@ public class CompanyService {
 		Company company = companyRepository
 			.findByCompanyIdAndVisibilityAndDeletedAtIsNull(companyId, CompanyVisibility.VISIBLE)
 			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+		return toDetail(company);
+	}
+
+	/** 내 업체 조회. 숨김 상태여도 본인에게는 보인다 */
+	public CompanyDetailResponse getMine(Long memberId) {
+		companyMemberValidator.validate(memberId);
+		return toDetail(findMine(memberId));
+	}
+
+	/** 받은 값으로 전체를 바꾼다. 목록은 기존 행을 지우고 다시 넣는다 */
+	@Transactional
+	public CompanyDetailResponse update(Long memberId, CompanySaveRequest request) {
+		companyMemberValidator.validate(memberId);
+		Company company = findMine(memberId);
+		categoryService.validateSelectable(request.categoryId(), CategoryDomain.COMMON);
+		validateFiles(memberId, request);
+
+		request.applyTo(company);
+		Long companyId = company.getCompanyId();
+		companyCategoryRepository.deleteByCompanyId(companyId);
+		companyCertificationRepository.deleteByCompanyId(companyId);
+		companyEquipmentRepository.deleteByCompanyId(companyId);
+		companyImageRepository.deleteByCompanyId(companyId);
+		saveDetails(companyId, request);
+		return toDetail(company);
+	}
+
+	private Company findMine(Long memberId) {
+		return companyRepository.findByMemberIdAndDeletedAtIsNull(memberId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
+	}
+
+	private CompanyDetailResponse toDetail(Company company) {
+		Long companyId = company.getCompanyId();
 		List<CompanyCertification> certifications = companyCertificationRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
 		List<CompanyEquipment> equipments = companyEquipmentRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
 		List<CompanyImage> images = companyImageRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
@@ -123,7 +153,7 @@ public class CompanyService {
 	}
 
 	/** 동시에 들어온 등록 요청이 먼저 저장했으면 DB의 회원당 1개 제약에 걸린다. 그 경우만 409로 바꾼다 */
-	private Long saveCompany(Long memberId, CompanyCreateRequest request) {
+	private Long saveCompany(Long memberId, CompanySaveRequest request) {
 		try {
 			return companyRepository.saveAndFlush(request.toEntity(memberId)).getCompanyId();
 		} catch (DataIntegrityViolationException e) {
@@ -134,12 +164,20 @@ public class CompanyService {
 		}
 	}
 
+	private void saveDetails(Long companyId, CompanySaveRequest request) {
+		companyCategoryRepository.save(CompanyCategory.of(companyId, request.categoryId()));
+		saveCertifications(companyId, request.certTypes());
+		saveEquipments(companyId, request.equipments());
+		saveImages(companyId, CompanyImageType.PORTFOLIO, request.portfolioFileIds());
+		saveImages(companyId, CompanyImageType.OFFICE, request.officeFileIds());
+	}
+
 	/** 본인이 올린 파일인지, 자리에 맞는 용도로 올린 파일인지 확인한다 */
-	private void validateFiles(Long memberId, CompanyCreateRequest request) {
+	private void validateFiles(Long memberId, CompanySaveRequest request) {
 		fileUsageValidator.validate(memberId, FilePurpose.COMPANY_LOGO, singleOrEmpty(request.logoFileId()));
 		fileUsageValidator.validate(memberId, FilePurpose.COMPANY_BACKGROUND, singleOrEmpty(request.backgroundFileId()));
 		fileUsageValidator.validate(memberId, FilePurpose.COMPANY_EQUIPMENT, request.equipments().stream()
-			.map(CompanyCreateRequest.Equipment::imageFileId)
+			.map(CompanySaveRequest.Equipment::imageFileId)
 			.toList());
 		fileUsageValidator.validate(memberId, FilePurpose.COMPANY_PORTFOLIO, request.portfolioFileIds());
 		fileUsageValidator.validate(memberId, FilePurpose.COMPANY_IMAGE, request.officeFileIds());
@@ -157,7 +195,7 @@ public class CompanyService {
 			.toList());
 	}
 
-	private void saveEquipments(Long companyId, List<CompanyCreateRequest.Equipment> equipments) {
+	private void saveEquipments(Long companyId, List<CompanySaveRequest.Equipment> equipments) {
 		companyEquipmentRepository.saveAll(IntStream.range(0, equipments.size())
 			.mapToObj(i -> CompanyEquipment.of(companyId, equipments.get(i).name(), equipments.get(i).imageFileId(), i + 1))
 			.toList());

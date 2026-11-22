@@ -115,4 +115,27 @@ public class Company extends BaseTimeEntity {
 		this.viewCount = 0;
 		this.visibility = CompanyVisibility.VISIBLE;
 	}
+
+	/** 정보 수정. 소유 회원·조회수·노출 상태는 바꾸지 않는다 */
+	public void update(String name, String industry, String products, String businessHours,
+		String contactPhone, String address, String addressDetail, BigDecimal latitude, BigDecimal longitude,
+		String representativeName, LocalDate foundedDate, Integer employeeCount, String homepageUrl,
+		String description, Long logoFileId, Long backgroundFileId) {
+		this.name = name;
+		this.industry = industry;
+		this.products = products;
+		this.businessHours = businessHours;
+		this.contactPhone = contactPhone;
+		this.address = address;
+		this.addressDetail = addressDetail;
+		this.latitude = latitude;
+		this.longitude = longitude;
+		this.representativeName = representativeName;
+		this.foundedDate = foundedDate;
+		this.employeeCount = employeeCount;
+		this.homepageUrl = homepageUrl;
+		this.description = description;
+		this.logoFileId = logoFileId;
+		this.backgroundFileId = backgroundFileId;
+	}
 }

@@ -1,6 +1,6 @@
 package com.example.packhub.domain.company.controller;
 
-import com.example.packhub.domain.company.dto.CompanyCreateRequest;
+import com.example.packhub.domain.company.dto.CompanySaveRequest;
 import com.example.packhub.domain.company.dto.CompanyCreateResponse;
 import com.example.packhub.domain.company.dto.CompanyDetailResponse;
 import com.example.packhub.domain.company.service.CompanyService;
@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -33,7 +34,7 @@ public class CompanyController {
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	public ApiResponse<CompanyCreateResponse> register(@CurrentMember Long memberId,
-		@Valid @RequestBody CompanyCreateRequest request) {
+		@Valid @RequestBody CompanySaveRequest request) {
 		return ApiResponse.ok(companyService.register(memberId, request));
 	}
 
@@ -43,5 +44,20 @@ public class CompanyController {
 	@GetMapping("/{companyId}")
 	public ApiResponse<CompanyDetailResponse> getDetail(@PathVariable Long companyId) {
 		return ApiResponse.ok(companyService.getDetail(companyId));
+	}
+
+	@Operation(summary = "내 업체 조회 (10-3)",
+		description = "로그인한 기업회원의 업체. 숨김 상태여도 조회된다. 없으면 404다.")
+	@GetMapping("/me")
+	public ApiResponse<CompanyDetailResponse> getMine(@CurrentMember Long memberId) {
+		return ApiResponse.ok(companyService.getMine(memberId));
+	}
+
+	@Operation(summary = "업체 정보 수정 (10-3)",
+		description = "등록과 같은 값을 모두 보내면 전체를 바꾼다. 목록에서 뺀 항목은 지워진다.")
+	@PutMapping("/me")
+	public ApiResponse<CompanyDetailResponse> update(@CurrentMember Long memberId,
+		@Valid @RequestBody CompanySaveRequest request) {
+		return ApiResponse.ok(companyService.update(memberId, request));
 	}
 }

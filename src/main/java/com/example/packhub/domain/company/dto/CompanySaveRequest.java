@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 업체 등록 요청. 필수값은 ERD의 NOT NULL을 따른다.
+ * 업체 등록·수정 요청. 수정은 받은 값으로 전체를 바꾼다. 필수값은 ERD의 NOT NULL을 따른다.
  * 파일은 먼저 파일 업로드 API로 올리고 여기에는 fileId만 담는다. 목록의 순서가 화면 표시 순서다.
  *
  * @param categoryId       카테고리 소분류 ID (GET /api/v1/categories?domain=COMMON). 지금은 1개만 받는다
@@ -21,7 +21,7 @@ import java.util.List;
  * @param portfolioFileIds 포트폴리오 파일 (용도 COMPANY_PORTFOLIO, PDF 가능)
  * @param officeFileIds    업체 사진 (용도 COMPANY_IMAGE)
  */
-public record CompanyCreateRequest(
+public record CompanySaveRequest(
 	@NotBlank @Size(max = 100) String name,
 	@NotBlank @Size(max = 50) String industry,
 	@NotBlank @Size(max = 255) String products,
@@ -53,7 +53,7 @@ public record CompanyCreateRequest(
 	}
 
 	/** 목록을 보내지 않으면 빈 목록으로 본다 */
-	public CompanyCreateRequest {
+	public CompanySaveRequest {
 		certTypes = certTypes == null ? List.of() : certTypes;
 		equipments = equipments == null ? List.of() : equipments;
 		portfolioFileIds = portfolioFileIds == null ? List.of() : portfolioFileIds;
@@ -80,5 +80,11 @@ public record CompanyCreateRequest(
 			.logoFileId(logoFileId)
 			.backgroundFileId(backgroundFileId)
 			.build();
+	}
+
+	public void applyTo(Company company) {
+		company.update(name, industry, products, businessHours, contactPhone, address, addressDetail,
+			latitude, longitude, representativeName, foundedDate, employeeCount, homepageUrl,
+			description, logoFileId, backgroundFileId);
 	}
 }
