@@ -8,12 +8,15 @@ import com.example.packhub.domain.company.dto.CompanySearchRequest;
 import com.example.packhub.domain.company.service.CompanyService;
 import com.example.packhub.global.common.ApiResponse;
 import com.example.packhub.global.security.CurrentMember;
+import com.example.packhub.global.security.LoginMember;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,18 +47,22 @@ public class CompanyController {
 
 	@Operation(summary = "업체 목록 조회 (4-1)",
 		description = "로그인 없이 조회할 수 있다. 삭제했거나 숨김 상태인 업체는 나오지 않는다. "
-			+ "categoryId에 대분류를 보내면 그 아래 소분류 전체에서 찾는다. page는 1부터 시작한다.")
+			+ "categoryId에 대분류를 보내면 그 아래 소분류 전체에서 찾는다. page는 1부터 시작한다. "
+			+ "로그인하고 조회하면 저장(관심)한 업체에 favorited가 true로 나온다.")
 	@GetMapping
-	public ApiResponse<CompanyPageResponse> search(@ParameterObject @Valid @ModelAttribute CompanySearchRequest request) {
-		return ApiResponse.ok(companyService.search(request));
+	public ApiResponse<CompanyPageResponse> search(
+		@Parameter(hidden = true) @AuthenticationPrincipal LoginMember loginMember,
+		@ParameterObject @Valid @ModelAttribute CompanySearchRequest request) {
+		return ApiResponse.ok(companyService.search(request, memberIdOf(loginMember)));
 	}
 
 	@Operation(summary = "업체 상세 조회 (4-3)",
 		description = "로그인 없이 조회할 수 있다. 삭제했거나 숨김 상태인 업체는 404다. "
 			+ "파일의 url은 1시간 동안만 열리는 조회용 주소다.")
 	@GetMapping("/{companyId}")
-	public ApiResponse<CompanyDetailResponse> getDetail(@PathVariable Long companyId) {
-		return ApiResponse.ok(companyService.getDetail(companyId));
+	public ApiResponse<CompanyDetailResponse> getDetail(
+		@Parameter(hidden = true) @AuthenticationPrincipal LoginMember loginMember, @PathVariable Long companyId) {
+		return ApiResponse.ok(companyService.getDetail(companyId, memberIdOf(loginMember)));
 	}
 
 	@Operation(summary = "내 업체 조회 (10-3)",
@@ -71,5 +78,10 @@ public class CompanyController {
 	public ApiResponse<CompanyDetailResponse> update(@CurrentMember Long memberId,
 		@Valid @RequestBody CompanySaveRequest request) {
 		return ApiResponse.ok(companyService.update(memberId, request));
+	}
+
+	/** 목록·상세는 로그인 없이도 볼 수 있어서 회원이 없을 수 있다. 로그인하지 않았으면 null */
+	private Long memberIdOf(LoginMember loginMember) {
+		return loginMember == null ? null : loginMember.memberId();
 	}
 }

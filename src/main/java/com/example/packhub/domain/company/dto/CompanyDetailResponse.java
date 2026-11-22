@@ -15,6 +15,7 @@ import java.util.Objects;
 /**
  * 업체 상세 (4-3). 목록은 등록할 때 보낸 순서(sortOrder)대로다.
  * 로고·배경사진은 없으면 null이고, 포트폴리오는 PDF일 수도 있다 (contentType으로 구분).
+ * favorited는 로그인한 회원이 이 업체를 저장(관심)했는지다. 로그인하지 않았으면 false다.
  */
 public record CompanyDetailResponse(
 	Long companyId,
@@ -38,7 +39,8 @@ public record CompanyDetailResponse(
 	List<Certification> certifications,
 	List<Equipment> equipments,
 	List<CompanyFileResponse> portfolios,
-	List<CompanyFileResponse> officeImages
+	List<CompanyFileResponse> officeImages,
+	boolean favorited
 ) {
 
 	/** 업체가 고른 소분류와 그 대분류 */
@@ -54,7 +56,7 @@ public record CompanyDetailResponse(
 	/** @param files fileId로 찾을 수 있게 모아 둔 파일 응답. 삭제된 파일은 들어 있지 않다 */
 	public static CompanyDetailResponse of(Company company, Category category,
 		List<CompanyCertification> certifications, List<CompanyEquipment> equipments, List<CompanyImage> images,
-		Map<Long, CompanyFileResponse> files) {
+		Map<Long, CompanyFileResponse> files, boolean favorited) {
 		return new CompanyDetailResponse(
 			company.getCompanyId(),
 			company.getName(),
@@ -82,7 +84,8 @@ public record CompanyDetailResponse(
 				.map(equipment -> new Equipment(equipment.getName(), files.get(equipment.getImageFileId())))
 				.toList(),
 			imagesOf(images, CompanyImageType.PORTFOLIO, files),
-			imagesOf(images, CompanyImageType.OFFICE, files));
+			imagesOf(images, CompanyImageType.OFFICE, files),
+			favorited);
 	}
 
 	private static List<CompanyFileResponse> imagesOf(List<CompanyImage> images, CompanyImageType imageType,
