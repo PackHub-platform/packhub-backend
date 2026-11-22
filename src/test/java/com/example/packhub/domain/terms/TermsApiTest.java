@@ -99,6 +99,17 @@ class TermsApiTest {
 	}
 
 	@Test
+	void 시행일이_같은_버전이_있으면_나중에_넣은_버전을_목록과_가입_검사_모두_쓴다() throws Exception {
+		insertTerms(10, "SERVICE", "2.0", "2026-11-10 00:00:00");
+		insertTerms(11, "SERVICE", "2.1", "2026-11-10 00:00:00");
+
+		mockMvc.perform(get("/api/v1/terms"))
+			.andExpect(jsonPath("$.data[0].termsId").value(11));
+		signUp(ALL_REQUIRED_AGREED.replace("{\"termsId\":1,", "{\"termsId\":11,"))
+			.andExpect(status().isCreated());
+	}
+
+	@Test
 	void 본문은_최신_버전_또는_지정한_버전을_준다() throws Exception {
 		mockMvc.perform(get("/api/v1/terms/PRIVACY"))
 			.andExpect(status().isOk())

@@ -98,7 +98,7 @@ public class TermsService {
 	/** 시행일 최신순으로 받아서, 종류마다 처음 나온 것(=최신)만 남긴다 */
 	private Map<TermsType, Terms> findLatestByType(List<TermsType> termsTypes) {
 		Map<TermsType, Terms> latestByType = new EnumMap<>(TermsType.class);
-		termsRepository.findByTermsTypeInAndEffectiveAtLessThanEqualOrderByEffectiveAtDesc(termsTypes,
+		termsRepository.findByTermsTypeInAndEffectiveAtLessThanEqualOrderByEffectiveAtDescTermsIdDesc(termsTypes,
 				LocalDateTime.now())
 			.forEach(terms -> latestByType.putIfAbsent(terms.getTermsType(), terms));
 		return latestByType;
