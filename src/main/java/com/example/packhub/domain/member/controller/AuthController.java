@@ -33,7 +33,7 @@ public class AuthController {
 	private final AuthService authService;
 
 	@Operation(summary = "회원가입 (1-1, 1-2, 1-3, 1-5)",
-		description = "가입하고 바로 Access Token을 준다. 기업회원이면 nextStep이 BUSINESS_VERIFICATION이다. 인증번호·약관 검사는 아직 없다.")
+		description = "가입하고 바로 Access Token을 준다. 기업회원이면 nextStep이 BUSINESS_VERIFICATION이다. agreements에는 GET /terms로 받은 가입 약관마다 동의 여부를 보내고, 필수 약관을 하나라도 동의하지 않으면 REQUIRED_TERMS_NOT_AGREED. 인증번호 검사는 아직 없다.")
 	@PostMapping("/signup")
 	@ResponseStatus(HttpStatus.CREATED)
 	public ApiResponse<SignUpResponse> signUp(@Valid @RequestBody SignUpRequest request) {
