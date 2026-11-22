@@ -25,6 +25,10 @@ public enum ErrorCode {
 	MEMBER_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다."),
 	INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 로그인 정보입니다. 다시 로그인해 주세요."),
 	REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "로그인 기간이 만료되었습니다. 다시 로그인해 주세요."),
+	REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "필수 약관에 모두 동의해 주세요."),
+
+	// 약관
+	TERMS_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 약관을 찾을 수 없습니다."),
 
 	// 이용권·결제
 	COMPANY_MEMBER_REQUIRED(HttpStatus.FORBIDDEN, "기업회원만 이용할 수 있습니다."),

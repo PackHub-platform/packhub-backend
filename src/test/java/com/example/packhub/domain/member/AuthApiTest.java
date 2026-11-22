@@ -52,6 +52,7 @@ class AuthApiTest {
 	@AfterEach
 	void cleanUp() {
 		jdbcTemplate.update("DELETE FROM RefreshToken");
+		jdbcTemplate.update("DELETE FROM MemberTermsAgreement");
 		memberRepository.deleteAllInBatch();
 	}
 
@@ -173,7 +174,7 @@ class AuthApiTest {
 		return mockMvc.perform(post("/api/v1/auth/signup")
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
-				{"memberType":"%s","email":"%s","password":"%s","passwordConfirm":"%s","phone":"%s","name":"김팩허"}
+				{"memberType":"%s","email":"%s","password":"%s","passwordConfirm":"%s","phone":"%s","name":"김팩허","agreements":[{"termsId":1,"agreed":true},{"termsId":2,"agreed":true},{"termsId":3,"agreed":true},{"termsId":4,"agreed":false},{"termsId":5,"agreed":false}]}
 				""".formatted(memberType, email, password, passwordConfirm, phone)));
 	}
 

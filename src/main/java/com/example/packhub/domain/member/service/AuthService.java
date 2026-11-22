@@ -10,6 +10,7 @@ import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.entity.MemberStatus;
 import com.example.packhub.domain.member.entity.MemberType;
 import com.example.packhub.domain.member.repository.MemberRepository;
+import com.example.packhub.domain.terms.service.TermsService;
 import com.example.packhub.global.error.BusinessException;
 import com.example.packhub.global.error.ErrorCode;
 import com.example.packhub.global.security.jwt.JwtProvider;
@@ -30,12 +31,14 @@ public class AuthService {
 	private final PasswordEncoder passwordEncoder;
 	private final JwtProvider jwtProvider;
 	private final RefreshTokenService refreshTokenService;
+	private final TermsService termsService;
 
 	@Transactional
 	public SignUpResponse signUp(SignUpRequest request) {
 		if (!request.password().equals(request.passwordConfirm())) {
 			throw new BusinessException(ErrorCode.PASSWORD_CONFIRM_MISMATCH);
 		}
+		termsService.checkSignUpAgreements(request.agreements());
 		// 대부분의 중복은 여기서 친절한 에러로 거른다
 		if (memberRepository.existsByEmail(request.email())) {
 			throw new BusinessException(ErrorCode.MEMBER_EMAIL_DUPLICATED);
@@ -47,6 +50,7 @@ public class AuthService {
 		Member member = Member.signUp(request.email(), passwordEncoder.encode(request.password()), request.name(),
 			request.phone(), request.memberType());
 		saveNewMember(member);
+		termsService.saveAgreements(member.getMemberId(), request.agreements(), LocalDateTime.now());
 
 		SignUpNextStep nextStep = member.getMemberType() == MemberType.COMPANY
 			? SignUpNextStep.BUSINESS_VERIFICATION
