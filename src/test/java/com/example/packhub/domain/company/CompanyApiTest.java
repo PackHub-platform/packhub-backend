@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -67,7 +68,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * 업체 등록·상세 조회, 분류 목록, 보유 인증 목록 API.
+ * 업체 등록·상세 조회·내 업체 조회·수정, 분류 목록, 보유 인증 목록 API.
  * 요청이 실제로 커밋되므로(테스트 롤백 불가) 테스트마다 데이터를 직접 지운다. 분류(Category)는 기초 데이터라 지우지 않는다.
  */
 @SpringBootTest
@@ -95,6 +96,7 @@ class CompanyApiTest {
 	/** 기초 데이터: 100 = 대분류 "연포장·파우치", 101 = 그 아래 소분류 "삼방봉투" */
 	private static final long PARENT_CATEGORY = 100L;
 	private static final long SUB_CATEGORY = 101L;
+	private static final long OTHER_SUB_CATEGORY = 102L;
 	private static final long BASIC_PLAN = 1L;
 
 	@Autowired
@@ -507,6 +509,176 @@ class CompanyApiTest {
 	}
 
 	@Test
+	void 내_업체_조회는_로그인한_기업회원의_업체를_반환한다() throws Exception {
+		long companyId = registerAndGetId(fullBody());
+
+		mockMvc.perform(get("/api/v1/companies/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.companyId").value(companyId))
+			.andExpect(jsonPath("$.data.name").value("팩허브 팩토리"))
+			.andExpect(jsonPath("$.data.certifications.length()").value(2))
+			.andExpect(jsonPath("$.data.portfolios.length()").value(2));
+	}
+
+	@Test
+	void 내_업체_조회는_숨김_상태여도_보인다() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+		jdbcTemplate.update("UPDATE `Company` SET `visibility` = 'HIDDEN' WHERE `companyId` = ?", companyId);
+
+		mockMvc.perform(get("/api/v1/companies/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.companyId").value(companyId));
+	}
+
+	@Test
+	void 내_업체_조회는_등록한_업체가_없으면_404() throws Exception {
+		mockMvc.perform(get("/api/v1/companies/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 내_업체_조회는_삭제한_업체를_반환하지_않는다() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+		jdbcTemplate.update("UPDATE `Company` SET `deletedAt` = NOW() WHERE `companyId` = ?", companyId);
+
+		mockMvc.perform(get("/api/v1/companies/me").header(HttpHeaders.AUTHORIZATION, bearer(company)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 내_업체_조회는_토큰이_없으면_401이고_일반회원은_403() throws Exception {
+		mockMvc.perform(get("/api/v1/companies/me"))
+			.andExpect(status().isUnauthorized());
+
+		mockMvc.perform(get("/api/v1/companies/me").header(HttpHeaders.AUTHORIZATION, bearer(general)))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 수정하면_받은_값으로_전체가_바뀌고_뺀_항목은_지워진다() throws Exception {
+		long companyId = registerAndGetId(fullBody());
+
+		update(company, updatedBody())
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.companyId").value(companyId))
+			.andExpect(jsonPath("$.data.name").value("팩허브 패키징"))
+			.andExpect(jsonPath("$.data.category.categoryId").value(OTHER_SUB_CATEGORY))
+			.andExpect(jsonPath("$.data.addressDetail").doesNotExist())
+			.andExpect(jsonPath("$.data.employeeCount").value(30))
+			.andExpect(jsonPath("$.data.homepageUrl").value("https://packhub.example.com"))
+			.andExpect(jsonPath("$.data.logo").doesNotExist())
+			.andExpect(jsonPath("$.data.background.fileId").value(background))
+			.andExpect(jsonPath("$.data.certifications.length()").value(2))
+			.andExpect(jsonPath("$.data.certifications[0].code").value("ISO_9001"))
+			.andExpect(jsonPath("$.data.certifications[1].code").value("KS"))
+			.andExpect(jsonPath("$.data.equipments.length()").value(1))
+			.andExpect(jsonPath("$.data.equipments[0].name").value("드라이 라미네이터"))
+			.andExpect(jsonPath("$.data.equipments[0].image.fileId").value(equipmentImage2))
+			.andExpect(jsonPath("$.data.portfolios.length()").value(1))
+			.andExpect(jsonPath("$.data.portfolios[0].fileId").value(portfolioImage))
+			.andExpect(jsonPath("$.data.officeImages.length()").value(0));
+
+		Company saved = companyRepository.findById(companyId).orElseThrow();
+		assertThat(saved.getName()).isEqualTo("팩허브 패키징");
+		assertThat(saved.getMemberId()).isEqualTo(company);
+		assertThat(saved.getLogoFileId()).isNull();
+		assertThat(saved.getVisibility()).isEqualTo(CompanyVisibility.VISIBLE);
+		assertThat(companyRepository.count()).isEqualTo(1);
+		assertThat(companyCategoryRepository.findAll()).extracting(CompanyCategory::getCategoryId)
+			.containsExactly(OTHER_SUB_CATEGORY);
+		assertThat(sorted(companyCertificationRepository.findAll(), CompanyCertification::getSortOrder))
+			.extracting(CompanyCertification::getCertType)
+			.containsExactly(CertificationType.ISO_9001, CertificationType.KS);
+		assertThat(companyEquipmentRepository.count()).isEqualTo(1);
+		assertThat(imagesOf(CompanyImageType.PORTFOLIO)).extracting(CompanyImage::getFileId)
+			.containsExactly(portfolioImage);
+		assertThat(imagesOf(CompanyImageType.OFFICE)).isEmpty();
+	}
+
+	@Test
+	void 같은_값으로_다시_저장해도_수정된다() throws Exception {
+		registerAndGetId(fullBody());
+
+		// 인증·사진을 그대로 다시 보내도 (companyId, certType) 중복에 걸리지 않아야 한다
+		update(company, fullBody())
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.certifications.length()").value(2))
+			.andExpect(jsonPath("$.data.equipments.length()").value(2));
+
+		assertThat(companyCertificationRepository.count()).isEqualTo(2);
+		assertThat(companyImageRepository.count()).isEqualTo(3);
+	}
+
+	@Test
+	void 수정은_이용권이_끝나도_할_수_있다() throws Exception {
+		registerAndGetId(minimalBody(SUB_CATEGORY));
+		subscriptionRepository.deleteAllInBatch();
+
+		update(company, updatedBody()).andExpect(status().isOk());
+	}
+
+	@Test
+	void 숨김_상태인_업체도_수정할_수_있고_숨김_상태는_그대로다() throws Exception {
+		long companyId = registerAndGetId(minimalBody(SUB_CATEGORY));
+		jdbcTemplate.update("UPDATE `Company` SET `visibility` = 'HIDDEN' WHERE `companyId` = ?", companyId);
+
+		update(company, updatedBody()).andExpect(status().isOk());
+
+		assertThat(companyRepository.findById(companyId).orElseThrow().getVisibility())
+			.isEqualTo(CompanyVisibility.HIDDEN);
+	}
+
+	@Test
+	void 등록한_업체가_없으면_수정은_404() throws Exception {
+		update(companyWithoutPlan, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_NOT_FOUND"));
+	}
+
+	@Test
+	void 수정은_토큰이_없으면_401이고_일반회원은_403() throws Exception {
+		mockMvc.perform(put("/api/v1/companies/me")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(minimalBody(SUB_CATEGORY)))
+			.andExpect(status().isUnauthorized());
+
+		update(general, minimalBody(SUB_CATEGORY))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("COMPANY_MEMBER_REQUIRED"));
+	}
+
+	@Test
+	void 수정할_때도_입력값과_카테고리를_검사한다() throws Exception {
+		registerAndGetId(minimalBody(SUB_CATEGORY));
+
+		update(company, minimalBody(SUB_CATEGORY).replace(",\"employeeCount\":12", ""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+
+		update(company, minimalBody(PARENT_CATEGORY))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY"));
+	}
+
+	@Test
+	void 수정할_때_남의_파일을_쓰면_403이고_아무것도_바뀌지_않는다() throws Exception {
+		long companyId = registerAndGetId(fullBody());
+		Long othersImage = saveFile(companyWithoutPlan, FilePurpose.COMPANY_PORTFOLIO, "image/png");
+
+		update(company, updatedBody().replace("\"portfolioFileIds\":[" + portfolioImage,
+				"\"portfolioFileIds\":[" + othersImage))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error.code").value("FILE_ACCESS_DENIED"));
+
+		assertThat(companyRepository.findById(companyId).orElseThrow().getName()).isEqualTo("팩허브 팩토리");
+		assertThat(companyCertificationRepository.count()).isEqualTo(2);
+		assertThat(companyImageRepository.count()).isEqualTo(3);
+	}
+
+	@Test
 	void 분류_목록은_로그인_없이_대분류_37개와_소분류를_순서대로_반환한다() throws Exception {
 		mockMvc.perform(get("/api/v1/categories").param("domain", "COMMON"))
 			.andExpect(status().isOk())
@@ -559,6 +731,25 @@ class CompanyApiTest {
 			.andExpect(status().isCreated())
 			.andReturn().getResponse().getContentAsString(), "$.data.companyId");
 		return companyId.longValue();
+	}
+
+	private ResultActions update(long memberId, String body) throws Exception {
+		return mockMvc.perform(put("/api/v1/companies/me")
+			.header(HttpHeaders.AUTHORIZATION, bearer(memberId))
+			.contentType(MediaType.APPLICATION_JSON)
+			.content(body));
+	}
+
+	/** 수정 요청. 등록(fullBody)에서 이름·카테고리·직원 수를 바꾸고, 로고·상세 주소·업체 사진을 빼고, 목록을 줄였다 */
+	private String updatedBody() {
+		return """
+			{"name":"팩허브 패키징","industry":"그라비아 연포장","products":"스탠딩파우치","categoryId":%d,\
+			"businessHours":"08:00 - 17:00","contactPhone":"02-1234-5678","address":"경기 안산시 단원구 1",\
+			"representativeName":"홍길동","foundedDate":"2015-03-02","description":"연포장 전문 업체입니다.",\
+			"employeeCount":30,"homepageUrl":"https://packhub.example.com","backgroundFileId":%d,\
+			"certTypes":["ISO_9001","KS"],"equipments":[{"name":"드라이 라미네이터","imageFileId":%d}],\
+			"portfolioFileIds":[%d],"officeFileIds":[]}\
+			""".formatted(OTHER_SUB_CATEGORY, background, equipmentImage2, portfolioImage);
 	}
 
 	/** 필수값만 채운 요청. 홈페이지·로고·인증·설비·사진은 보내지 않는다 */
