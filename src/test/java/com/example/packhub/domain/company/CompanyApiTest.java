@@ -843,6 +843,23 @@ class CompanyApiTest {
 	}
 
 	@Test
+	void 너무_큰_페이지_번호는_400() throws Exception {
+		saveCompany("업체 1", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+
+		// 100000페이지까지는 받는다. 업체가 없는 페이지라 빈 목록이다
+		mockMvc.perform(get("/api/v1/companies").param("page", "100000").param("size", "50"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(0))
+			.andExpect(jsonPath("$.data.totalElements").value(1));
+
+		for (String page : new String[] {"100001", "100000000", "2147483647"}) {
+			mockMvc.perform(get("/api/v1/companies").param("page", page))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+		}
+	}
+
+	@Test
 	void 목록_조회_조건이_잘못되면_400() throws Exception {
 		for (String[] param : new String[][] {{"page", "0"}, {"size", "0"}, {"size", "51"}, {"sort", "POPULAR"},
 			{"categoryId", "abc"}, {"keyword", "가".repeat(51)}}) {
