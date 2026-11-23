@@ -2,11 +2,13 @@ package com.example.packhub.domain.company.repository;
 
 import com.example.packhub.domain.company.entity.Company;
 import com.example.packhub.domain.company.entity.CompanyVisibility;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,6 +16,10 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
 	/** 삭제하지 않은 업체가 이미 있는지 (기업회원당 1개) */
 	boolean existsByMemberIdAndDeletedAtIsNull(Long memberId);
+
+	/** 수정용. 같은 업체의 수정이 동시에 와도 차례대로 처리되도록 업체 행을 잠그고 조회한다 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	Optional<Company> findForUpdateByMemberIdAndDeletedAtIsNull(Long memberId);
 
 	/** 삭제하지 않았고 노출 상태가 맞는 업체가 있는지 */
 	boolean existsByCompanyIdAndVisibilityAndDeletedAtIsNull(Long companyId, CompanyVisibility visibility);

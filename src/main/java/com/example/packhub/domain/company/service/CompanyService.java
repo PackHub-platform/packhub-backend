@@ -147,11 +147,15 @@ public class CompanyService {
 		return toDetail(findMine(memberId), memberId);
 	}
 
-	/** 받은 값으로 전체를 바꾼다. 목록은 기존 행을 지우고 다시 넣는다 */
+	/**
+	 * 받은 값으로 전체를 바꾼다. 목록은 기존 행을 지우고 다시 넣는다.
+	 * 업체 행을 잠그고 시작한다. 잠그지 않으면 동시에 온 두 수정의 기본 정보와 목록이 섞이거나 목록이 두 번 들어간다.
+	 */
 	@Transactional
 	public CompanyDetailResponse update(Long memberId, CompanySaveRequest request) {
 		companyMemberValidator.validate(memberId);
-		Company company = findMine(memberId);
+		Company company = companyRepository.findForUpdateByMemberIdAndDeletedAtIsNull(memberId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
 		categoryService.validateSelectable(request.categoryId(), CategoryDomain.COMMON);
 		validateFiles(memberId, request);
 

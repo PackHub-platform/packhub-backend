@@ -303,7 +303,8 @@ class FavoriteApiTest {
 
 	@Test
 	void 관심_목록_조건이_잘못되면_400() throws Exception {
-		for (String[] param : new String[][] {{"page", "0"}, {"size", "51"}, {"targetType", "MEMBER"}}) {
+		for (String[] param : new String[][] {{"page", "0"}, {"page", "100001"}, {"page", "2147483647"}, {"size", "51"},
+			{"targetType", "MEMBER"}}) {
 			mockMvc.perform(get("/api/v1/bookmarks").param(param[0], param[1])
 					.header(HttpHeaders.AUTHORIZATION, bearer(general)))
 				.andExpect(status().isBadRequest())
