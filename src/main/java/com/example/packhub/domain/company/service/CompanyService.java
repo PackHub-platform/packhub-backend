@@ -22,6 +22,7 @@ import com.example.packhub.domain.company.repository.CompanyCertificationReposit
 import com.example.packhub.domain.company.repository.CompanyEquipmentRepository;
 import com.example.packhub.domain.company.repository.CompanyImageRepository;
 import com.example.packhub.domain.company.repository.CompanyRepository;
+import com.example.packhub.domain.favorite.repository.FavoriteRepository;
 import com.example.packhub.domain.file.entity.File;
 import com.example.packhub.domain.file.entity.FilePurpose;
 import com.example.packhub.domain.file.service.FileService;
@@ -33,6 +34,7 @@ import com.example.packhub.global.error.ErrorCode;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -66,6 +68,7 @@ public class CompanyService {
 	private final CategoryService categoryService;
 	private final FileUsageValidator fileUsageValidator;
 	private final FileService fileService;
+	private final FavoriteRepository favoriteRepository;
 
 	@Transactional
 	public CompanyCreateResponse register(Long memberId, CompanySaveRequest request) {
@@ -84,8 +87,12 @@ public class CompanyService {
 		return new CompanyCreateResponse(companyId);
 	}
 
-	/** 노출 중인 업체 목록. 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다 */
-	public CompanyPageResponse search(CompanySearchRequest request) {
+	/**
+	 * 노출 중인 업체 목록. 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다.
+	 *
+	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 favorited는 모두 false다
+	 */
+	public CompanyPageResponse search(CompanySearchRequest request, Long memberId) {
 		boolean allCategories = request.categoryId() == null;
 		List<Long> categoryIds = allCategories ? List.of()
 			: categoryService.findFilterIds(request.categoryId(), CategoryDomain.COMMON);
@@ -98,9 +105,20 @@ public class CompanyService {
 			.filter(Objects::nonNull)
 			.distinct()
 			.toList());
+		Set<Long> favoriteCompanyIds = findFavoriteCompanyIds(memberId, page.getContent());
 		return CompanyPageResponse.of(page, page.getContent().stream()
-			.map(company -> CompanySummaryResponse.of(company, logos.get(company.getLogoFileId())))
+			.map(company -> CompanySummaryResponse.of(company, logos.get(company.getLogoFileId()),
+				favoriteCompanyIds.contains(company.getCompanyId())))
 			.toList());
+	}
+
+	/** 이 페이지의 업체 중 회원이 저장(관심)한 업체 */
+	private Set<Long> findFavoriteCompanyIds(Long memberId, List<Company> companies) {
+		if (memberId == null || companies.isEmpty()) {
+			return Set.of();
+		}
+		return Set.copyOf(favoriteRepository.findCompanyIds(memberId,
+			companies.stream().map(Company::getCompanyId).toList()));
 	}
 
 	/** 검색어의 %, _를 글자 그대로 찾도록 '!'로 이스케이프하고 앞뒤에 %를 붙인다. 검색어가 없으면 null */
@@ -111,25 +129,33 @@ public class CompanyService {
 		return "%" + keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
 	}
 
-	/** 삭제했거나 숨김 상태인 업체는 404 COMPANY_NOT_FOUND */
-	public CompanyDetailResponse getDetail(Long companyId) {
+	/**
+	 * 삭제했거나 숨김 상태인 업체는 404 COMPANY_NOT_FOUND.
+	 *
+	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 favorited는 false다
+	 */
+	public CompanyDetailResponse getDetail(Long companyId, Long memberId) {
 		Company company = companyRepository
 			.findByCompanyIdAndVisibilityAndDeletedAtIsNull(companyId, CompanyVisibility.VISIBLE)
 			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
-		return toDetail(company);
+		return toDetail(company, memberId);
 	}
 
 	/** 내 업체 조회. 숨김 상태여도 본인에게는 보인다 */
 	public CompanyDetailResponse getMine(Long memberId) {
 		companyMemberValidator.validate(memberId);
-		return toDetail(findMine(memberId));
+		return toDetail(findMine(memberId), memberId);
 	}
 
-	/** 받은 값으로 전체를 바꾼다. 목록은 기존 행을 지우고 다시 넣는다 */
+	/**
+	 * 받은 값으로 전체를 바꾼다. 목록은 기존 행을 지우고 다시 넣는다.
+	 * 업체 행을 잠그고 시작한다. 잠그지 않으면 동시에 온 두 수정의 기본 정보와 목록이 섞이거나 목록이 두 번 들어간다.
+	 */
 	@Transactional
 	public CompanyDetailResponse update(Long memberId, CompanySaveRequest request) {
 		companyMemberValidator.validate(memberId);
-		Company company = findMine(memberId);
+		Company company = companyRepository.findForUpdateByMemberIdAndDeletedAtIsNull(memberId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
 		categoryService.validateSelectable(request.categoryId(), CategoryDomain.COMMON);
 		validateFiles(memberId, request);
 
@@ -140,7 +166,7 @@ public class CompanyService {
 		companyEquipmentRepository.deleteByCompanyId(companyId);
 		companyImageRepository.deleteByCompanyId(companyId);
 		saveDetails(companyId, request);
-		return toDetail(company);
+		return toDetail(company, memberId);
 	}
 
 	private Company findMine(Long memberId) {
@@ -148,14 +174,15 @@ public class CompanyService {
 			.orElseThrow(() -> new BusinessException(ErrorCode.COMPANY_NOT_FOUND));
 	}
 
-	private CompanyDetailResponse toDetail(Company company) {
+	private CompanyDetailResponse toDetail(Company company, Long memberId) {
 		Long companyId = company.getCompanyId();
 		List<CompanyCertification> certifications = companyCertificationRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
 		List<CompanyEquipment> equipments = companyEquipmentRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
 		List<CompanyImage> images = companyImageRepository.findByCompanyIdOrderBySortOrderAsc(companyId);
 
+		boolean favorited = memberId != null && favoriteRepository.existsByMemberIdAndCompanyId(memberId, companyId);
 		return CompanyDetailResponse.of(company, findCategory(companyId), certifications, equipments, images,
-			findFiles(company, equipments, images));
+			findFiles(company, equipments, images), favorited);
 	}
 
 	/** 업체가 고른 소분류와 그 대분류 이름 */

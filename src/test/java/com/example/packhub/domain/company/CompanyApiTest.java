@@ -618,6 +618,38 @@ class CompanyApiTest {
 	}
 
 	@Test
+	void 수정_요청이_동시에_와도_기본_정보와_목록이_같은_요청의_값으로_남는다() throws Exception {
+		long companyId = registerAndGetId(fullBody());
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			for (int round = 0; round < 5; round++) {
+				CountDownLatch start = new CountDownLatch(1);
+				Callable<Integer> shrink = () -> {
+					start.await();
+					return update(company, updatedBody()).andReturn().getResponse().getStatus();
+				};
+				Callable<Integer> restore = () -> {
+					start.await();
+					return update(company, fullBody()).andReturn().getResponse().getStatus();
+				};
+				Future<Integer> first = executor.submit(shrink);
+				Future<Integer> second = executor.submit(restore);
+				start.countDown();
+				assertThat(List.of(first.get(), second.get())).containsExactly(200, 200);
+
+				// updatedBody는 이름 "팩허브 패키징"·인증 2개·설비 1개·사진 1개, fullBody는 "팩허브 팩토리"·인증 2개·설비 2개·사진 3개
+				boolean shrunk = companyRepository.findById(companyId).orElseThrow().getName().equals("팩허브 패키징");
+				assertThat(companyCategoryRepository.count()).isEqualTo(1);
+				assertThat(companyCertificationRepository.count()).isEqualTo(2);
+				assertThat(companyEquipmentRepository.count()).isEqualTo(shrunk ? 1 : 2);
+				assertThat(companyImageRepository.count()).isEqualTo(shrunk ? 1 : 3);
+			}
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
 	void 수정은_이용권이_끝나도_할_수_있다() throws Exception {
 		registerAndGetId(minimalBody(SUB_CATEGORY));
 		subscriptionRepository.deleteAllInBatch();
