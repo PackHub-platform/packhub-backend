@@ -60,6 +60,9 @@ public enum ErrorCode {
 	BUSINESS_VERIFICATION_IN_PROGRESS(HttpStatus.CONFLICT, "검토 중인 사업자 인증 신청이 있습니다."),
 	BUSINESS_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "사업자 인증 신청 내역이 없습니다."),
 
+	// 게시글
+	POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 게시글입니다."),
+
 	// 파일
 	INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
 	FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "파일 크기가 허용 범위를 벗어났습니다."),
