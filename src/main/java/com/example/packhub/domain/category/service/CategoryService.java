@@ -8,6 +8,7 @@ import com.example.packhub.global.error.BusinessException;
 import com.example.packhub.global.error.ErrorCode;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,10 @@ public class CategoryService {
 			.filter(Category::isParent)
 			.map(parent -> CategoryResponse.of(parent, childrenByParentId.getOrDefault(parent.getCategoryId(), List.of())))
 			.toList();
+	}
+
+	public Optional<Category> find(Long categoryId) {
+		return categoryRepository.findById(categoryId);
 	}
 
 	/** 고를 수 없는 분류(없음, 대분류, 다른 사용처, 사용 중지)면 400 INVALID_CATEGORY */

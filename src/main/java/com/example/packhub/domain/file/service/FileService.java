@@ -11,6 +11,8 @@ import com.example.packhub.global.error.BusinessException;
 import com.example.packhub.global.error.ErrorCode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Collection;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -83,6 +85,13 @@ public class FileService {
 				.signatureDuration(s3Properties.viewUrlExpiry())
 				.getObjectRequest(get -> get.bucket(s3Properties.bucket()).key(storageKey)))
 			.url().toString();
+	}
+
+	/** 다른 기능(업체 상세 등)이 저장해 둔 fileId로 파일을 찾는다. 삭제된 파일은 빼고 돌려준다 */
+	public List<File> findFiles(Collection<Long> fileIds) {
+		return fileRepository.findAllById(fileIds).stream()
+			.filter(file -> file.getDeletedAt() == null)
+			.toList();
 	}
 
 	private HeadObjectResponse headObject(String storageKey) {

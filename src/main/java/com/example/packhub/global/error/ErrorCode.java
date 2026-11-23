@@ -42,6 +42,7 @@ public enum ErrorCode {
 	SUBSCRIPTION_REQUIRED(HttpStatus.FORBIDDEN, "이용권을 결제한 뒤 이용할 수 있습니다."),
 	COMPANY_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록한 업체가 있습니다."),
 	INVALID_CATEGORY(HttpStatus.BAD_REQUEST, "선택할 수 없는 카테고리입니다."),
+	COMPANY_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 업체입니다."),
 
 	// 파일
 	INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
