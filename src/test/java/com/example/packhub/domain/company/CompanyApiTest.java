@@ -68,7 +68,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /**
- * 업체 등록·상세 조회·내 업체 조회·수정, 분류 목록, 보유 인증 목록 API.
+ * 업체 등록·상세 조회·내 업체 조회·수정·목록 조회, 분류 목록, 보유 인증 목록 API.
  * 요청이 실제로 커밋되므로(테스트 롤백 불가) 테스트마다 데이터를 직접 지운다. 분류(Category)는 기초 데이터라 지우지 않는다.
  */
 @SpringBootTest
@@ -97,6 +97,8 @@ class CompanyApiTest {
 	private static final long PARENT_CATEGORY = 100L;
 	private static final long SUB_CATEGORY = 101L;
 	private static final long OTHER_SUB_CATEGORY = 102L;
+	/** 다른 대분류(200) 아래의 소분류 */
+	private static final long OTHER_PARENT_SUB_CATEGORY = 201L;
 	private static final long BASIC_PLAN = 1L;
 
 	@Autowired
@@ -131,6 +133,9 @@ class CompanyApiTest {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+
+	/** saveCompany로 만드는 회원의 이메일·전화번호가 겹치지 않게 하는 번호 */
+	private int memberSequence;
 
 	/** 이용권을 이용 중인 기업회원 */
 	private Long company;
@@ -679,6 +684,192 @@ class CompanyApiTest {
 	}
 
 	@Test
+	void 목록은_로그인_없이_최신순으로_카드_정보와_페이지_정보를_반환한다() throws Exception {
+		long first = saveCompany("가나 포장", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long second = registerAndGetId(fullBody());
+
+		mockMvc.perform(get("/api/v1/companies"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(2))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(second))
+			.andExpect(jsonPath("$.data.content[0].name").value("팩허브 팩토리"))
+			.andExpect(jsonPath("$.data.content[0].industry").value("그라비아 연포장"))
+			.andExpect(jsonPath("$.data.content[0].products").value("스탠딩파우치, 지퍼파우치"))
+			.andExpect(jsonPath("$.data.content[0].address").value("경기 안산시 단원구 1"))
+			.andExpect(jsonPath("$.data.content[0].logo.fileId").value(logo))
+			.andExpect(jsonPath("$.data.content[0].logo.url").value(containsString("company-logo/")))
+			.andExpect(jsonPath("$.data.content[1].companyId").value(first))
+			.andExpect(jsonPath("$.data.content[1].logo").doesNotExist())
+			.andExpect(jsonPath("$.data.page").value(1))
+			.andExpect(jsonPath("$.data.size").value(24))
+			.andExpect(jsonPath("$.data.totalElements").value(2))
+			.andExpect(jsonPath("$.data.totalPages").value(1));
+	}
+
+	@Test
+	void 목록에_숨김_상태이거나_삭제한_업체는_나오지_않는다() throws Exception {
+		long visible = saveCompany("보이는 업체", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long hidden = saveCompany("숨긴 업체", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long deleted = saveCompany("삭제한 업체", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		jdbcTemplate.update("UPDATE `Company` SET `visibility` = 'HIDDEN' WHERE `companyId` = ?", hidden);
+		jdbcTemplate.update("UPDATE `Company` SET `deletedAt` = NOW() WHERE `companyId` = ?", deleted);
+
+		mockMvc.perform(get("/api/v1/companies"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(1))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(visible))
+			.andExpect(jsonPath("$.data.totalElements").value(1));
+	}
+
+	@Test
+	void 등록한_업체가_없으면_빈_목록이다() throws Exception {
+		mockMvc.perform(get("/api/v1/companies"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(0))
+			.andExpect(jsonPath("$.data.totalElements").value(0))
+			.andExpect(jsonPath("$.data.totalPages").value(0));
+	}
+
+	@Test
+	void 검색어는_업체명_업종_생산품목_중_하나에_포함되면_찾는다() throws Exception {
+		long byName = saveCompany("한라 박스", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long byIndustry = saveCompany("가나 포장", "골판지 박스 제조", "상자", SUB_CATEGORY, "2010-01-01", 10);
+		long byProducts = saveCompany("다라 산업", "지류", "택배 박스, 완충재", SUB_CATEGORY, "2010-01-01", 10);
+		saveCompany("마바 필름", "필름", "랩", SUB_CATEGORY, "2010-01-01", 10);
+
+		mockMvc.perform(get("/api/v1/companies").param("keyword", " 박스 "))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(3))
+			.andExpect(jsonPath("$.data.content[*].companyId")
+				.value(org.hamcrest.Matchers.contains((int) byProducts, (int) byIndustry, (int) byName)));
+	}
+
+	@Test
+	void 검색어의_퍼센트와_밑줄은_글자_그대로_찾는다() throws Exception {
+		long percent = saveCompany("100% 재생지", "지류", "재생지", SUB_CATEGORY, "2010-01-01", 10);
+		saveCompany("가나 포장", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+
+		mockMvc.perform(get("/api/v1/companies").param("keyword", "%"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(1))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(percent));
+
+		mockMvc.perform(get("/api/v1/companies").param("keyword", "_"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(0));
+	}
+
+	@Test
+	void 카테고리는_소분류면_그_소분류만_대분류면_아래_소분류_전체에서_찾는다() throws Exception {
+		long sub101 = saveCompany("삼방 업체", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long sub102 = saveCompany("사방 업체", "연포장", "파우치", OTHER_SUB_CATEGORY, "2010-01-01", 10);
+		saveCompany("다른 대분류 업체", "지류", "상자", OTHER_PARENT_SUB_CATEGORY, "2010-01-01", 10);
+
+		mockMvc.perform(get("/api/v1/companies").param("categoryId", String.valueOf(SUB_CATEGORY)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(1))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(sub101));
+
+		mockMvc.perform(get("/api/v1/companies").param("categoryId", String.valueOf(PARENT_CATEGORY)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(2))
+			.andExpect(jsonPath("$.data.content[*].companyId")
+				.value(org.hamcrest.Matchers.contains((int) sub102, (int) sub101)));
+	}
+
+	@Test
+	void 검색어와_카테고리를_같이_보내면_둘_다_맞는_업체만_찾는다() throws Exception {
+		long match = saveCompany("한라 박스", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		saveCompany("가나 박스", "연포장", "파우치", OTHER_PARENT_SUB_CATEGORY, "2010-01-01", 10);
+		saveCompany("다라 필름", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+
+		mockMvc.perform(get("/api/v1/companies")
+				.param("keyword", "박스")
+				.param("categoryId", String.valueOf(PARENT_CATEGORY)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.totalElements").value(1))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(match));
+	}
+
+	@Test
+	void 없는_카테고리로_찾으면_400() throws Exception {
+		mockMvc.perform(get("/api/v1/companies").param("categoryId", "999999"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY"));
+	}
+
+	@Test
+	void 개업일순은_설립일이_오래된_업체부터_규모순은_직원이_많은_업체부터다() throws Exception {
+		long oldSmall = saveCompany("오래된 작은 업체", "연포장", "파우치", SUB_CATEGORY, "1995-05-01", 5);
+		long newBig = saveCompany("새 큰 업체", "연포장", "파우치", SUB_CATEGORY, "2022-01-01", 300);
+		long middle = saveCompany("중간 업체", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 50);
+
+		mockMvc.perform(get("/api/v1/companies").param("sort", "FOUNDED"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[*].companyId")
+				.value(org.hamcrest.Matchers.contains((int) oldSmall, (int) middle, (int) newBig)));
+
+		mockMvc.perform(get("/api/v1/companies").param("sort", "SIZE"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[*].companyId")
+				.value(org.hamcrest.Matchers.contains((int) newBig, (int) middle, (int) oldSmall)));
+	}
+
+	@Test
+	void 페이지를_나눠서_반환하고_범위를_넘은_페이지는_비어_있다() throws Exception {
+		long first = saveCompany("업체 1", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long second = saveCompany("업체 2", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+		long third = saveCompany("업체 3", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+
+		mockMvc.perform(get("/api/v1/companies").param("size", "2"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[*].companyId")
+				.value(org.hamcrest.Matchers.contains((int) third, (int) second)))
+			.andExpect(jsonPath("$.data.page").value(1))
+			.andExpect(jsonPath("$.data.size").value(2))
+			.andExpect(jsonPath("$.data.totalElements").value(3))
+			.andExpect(jsonPath("$.data.totalPages").value(2));
+
+		mockMvc.perform(get("/api/v1/companies").param("size", "2").param("page", "2"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(1))
+			.andExpect(jsonPath("$.data.content[0].companyId").value(first))
+			.andExpect(jsonPath("$.data.page").value(2));
+
+		mockMvc.perform(get("/api/v1/companies").param("size", "2").param("page", "3"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(0))
+			.andExpect(jsonPath("$.data.totalElements").value(3));
+	}
+
+	@Test
+	void 너무_큰_페이지_번호는_400() throws Exception {
+		saveCompany("업체 1", "연포장", "파우치", SUB_CATEGORY, "2010-01-01", 10);
+
+		// 100000페이지까지는 받는다. 업체가 없는 페이지라 빈 목록이다
+		mockMvc.perform(get("/api/v1/companies").param("page", "100000").param("size", "50"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(0))
+			.andExpect(jsonPath("$.data.totalElements").value(1));
+
+		for (String page : new String[] {"100001", "100000000", "2147483647"}) {
+			mockMvc.perform(get("/api/v1/companies").param("page", page))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+		}
+	}
+
+	@Test
+	void 목록_조회_조건이_잘못되면_400() throws Exception {
+		for (String[] param : new String[][] {{"page", "0"}, {"size", "0"}, {"size", "51"}, {"sort", "POPULAR"},
+			{"categoryId", "abc"}, {"keyword", "가".repeat(51)}}) {
+			mockMvc.perform(get("/api/v1/companies").param(param[0], param[1]))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+		}
+	}
+
+	@Test
 	void 분류_목록은_로그인_없이_대분류_37개와_소분류를_순서대로_반환한다() throws Exception {
 		mockMvc.perform(get("/api/v1/categories").param("domain", "COMMON"))
 			.andExpect(status().isOk())
@@ -750,6 +941,28 @@ class CompanyApiTest {
 			"certTypes":["ISO_9001","KS"],"equipments":[{"name":"드라이 라미네이터","imageFileId":%d}],\
 			"portfolioFileIds":[%d],"officeFileIds":[]}\
 			""".formatted(OTHER_SUB_CATEGORY, background, equipmentImage2, portfolioImage);
+	}
+
+	/** 새 기업회원을 만들고 그 회원의 업체를 API를 거치지 않고 바로 저장한다 (목록 조회용) */
+	private long saveCompany(String name, String industry, String products, long categoryId, String foundedDate,
+		int employeeCount) {
+		int number = ++memberSequence;
+		Long owner = saveMember("co-owner" + number + "@test.com", "010-9200-%04d".formatted(number), MemberType.COMPANY);
+		Long companyId = companyRepository.save(Company.builder()
+			.memberId(owner)
+			.name(name)
+			.industry(industry)
+			.products(products)
+			.businessHours("09:00 - 18:00")
+			.contactPhone("02-1234-5678")
+			.address("경기 안산시 단원구 1")
+			.representativeName("홍길동")
+			.foundedDate(LocalDate.parse(foundedDate))
+			.employeeCount(employeeCount)
+			.description("설명")
+			.build()).getCompanyId();
+		companyCategoryRepository.save(CompanyCategory.of(companyId, categoryId));
+		return companyId;
 	}
 
 	/** 필수값만 채운 요청. 홈페이지·로고·인증·설비·사진은 보내지 않는다 */

@@ -3,6 +3,8 @@ package com.example.packhub.domain.company.controller;
 import com.example.packhub.domain.company.dto.CompanySaveRequest;
 import com.example.packhub.domain.company.dto.CompanyCreateResponse;
 import com.example.packhub.domain.company.dto.CompanyDetailResponse;
+import com.example.packhub.domain.company.dto.CompanyPageResponse;
+import com.example.packhub.domain.company.dto.CompanySearchRequest;
 import com.example.packhub.domain.company.service.CompanyService;
 import com.example.packhub.global.common.ApiResponse;
 import com.example.packhub.global.security.CurrentMember;
@@ -10,8 +12,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -36,6 +40,14 @@ public class CompanyController {
 	public ApiResponse<CompanyCreateResponse> register(@CurrentMember Long memberId,
 		@Valid @RequestBody CompanySaveRequest request) {
 		return ApiResponse.ok(companyService.register(memberId, request));
+	}
+
+	@Operation(summary = "업체 목록 조회 (4-1)",
+		description = "로그인 없이 조회할 수 있다. 삭제했거나 숨김 상태인 업체는 나오지 않는다. "
+			+ "categoryId에 대분류를 보내면 그 아래 소분류 전체에서 찾는다. page는 1부터 시작한다.")
+	@GetMapping
+	public ApiResponse<CompanyPageResponse> search(@ParameterObject @Valid @ModelAttribute CompanySearchRequest request) {
+		return ApiResponse.ok(companyService.search(request));
 	}
 
 	@Operation(summary = "업체 상세 조회 (4-3)",

@@ -38,6 +38,22 @@ public class CategoryService {
 		return categoryRepository.findById(categoryId);
 	}
 
+	/**
+	 * 목록 필터로 받은 분류를 소분류 ID 목록으로 바꾼다. 대분류면 그 아래 소분류 전체, 소분류면 자기 자신이다.
+	 * 없는 분류거나 다른 사용처의 분류면 400 INVALID_CATEGORY
+	 */
+	public List<Long> findFilterIds(Long categoryId, CategoryDomain domain) {
+		Category category = categoryRepository.findById(categoryId)
+			.filter(found -> found.getDomain() == domain)
+			.orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CATEGORY));
+		if (!category.isParent()) {
+			return List.of(categoryId);
+		}
+		return categoryRepository.findByParentId(categoryId).stream()
+			.map(Category::getCategoryId)
+			.toList();
+	}
+
 	/** 고를 수 없는 분류(없음, 대분류, 다른 사용처, 사용 중지)면 400 INVALID_CATEGORY */
 	public void validateSelectable(Long categoryId, CategoryDomain domain) {
 		categoryRepository.findById(categoryId)
