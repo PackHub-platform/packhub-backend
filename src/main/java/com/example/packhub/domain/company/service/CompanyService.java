@@ -1,5 +1,6 @@
 package com.example.packhub.domain.company.service;
 
+import com.example.packhub.domain.business.service.BusinessVerificationService;
 import com.example.packhub.domain.category.entity.CategoryDomain;
 import com.example.packhub.domain.category.service.CategoryService;
 import com.example.packhub.domain.company.dto.CompanySaveRequest;
@@ -46,9 +47,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 업체 등록·조회·수정·목록 조회. 등록은 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
+ * 업체 등록·조회·수정·목록 조회. 등록은 사업자 인증을 마치고 이용권을 이용 중인 기업회원만 할 수 있고, 기업회원당 1개만 등록할 수 있다.
  * 조회수(Company.viewCount)는 쓰는 화면이 없어 기록하지 않는다 (2026-11-22 결정).
- * TODO(기말): 사업자 인증 완료 체크 추가 (관리자 검토가 생길 때 함께, 2026-11-24 결정).
  */
 @Service
 @RequiredArgsConstructor
@@ -64,6 +64,7 @@ public class CompanyService {
 	private final CompanyEquipmentRepository companyEquipmentRepository;
 	private final CompanyImageRepository companyImageRepository;
 	private final CompanyMemberValidator companyMemberValidator;
+	private final BusinessVerificationService businessVerificationService;
 	private final SubscriptionService subscriptionService;
 	private final CategoryService categoryService;
 	private final FileUsageValidator fileUsageValidator;
@@ -73,6 +74,7 @@ public class CompanyService {
 	@Transactional
 	public CompanyCreateResponse register(Long memberId, CompanySaveRequest request) {
 		companyMemberValidator.validate(memberId);
+		businessVerificationService.validateApproved(memberId);
 		if (!subscriptionService.hasSubscriptionInUse(memberId)) {
 			throw new BusinessException(ErrorCode.SUBSCRIPTION_REQUIRED);
 		}
