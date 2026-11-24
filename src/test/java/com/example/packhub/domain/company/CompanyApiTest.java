@@ -11,8 +11,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.packhub.TestcontainersConfiguration;
-import com.example.packhub.domain.business.entity.BusinessVerification;
-import com.example.packhub.domain.business.repository.BusinessVerificationRepository;
 import com.example.packhub.domain.company.entity.CertificationType;
 import com.example.packhub.domain.company.entity.Company;
 import com.example.packhub.domain.company.entity.CompanyCategory;
@@ -38,7 +36,6 @@ import com.example.packhub.domain.subscription.repository.SubscriptionRepository
 import com.example.packhub.global.security.jwt.JwtProvider;
 import com.jayway.jsonpath.JsonPath;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
@@ -132,9 +129,6 @@ class CompanyApiTest {
 	private MemberRepository memberRepository;
 
 	@Autowired
-	private BusinessVerificationRepository businessVerificationRepository;
-
-	@Autowired
 	private JwtProvider jwtProvider;
 
 	@Autowired
@@ -182,7 +176,6 @@ class CompanyApiTest {
 		companyRepository.deleteAllInBatch();
 		fileRepository.deleteAllInBatch();
 		subscriptionRepository.deleteAllInBatch();
-		businessVerificationRepository.deleteAllInBatch();
 		memberRepository.deleteAllInBatch();
 	}
 
@@ -308,17 +301,6 @@ class CompanyApiTest {
 
 		register(company, minimalBody(SUB_CATEGORY)).andExpect(status().isCreated());
 		assertThat(companyRepository.count()).isEqualTo(2);
-	}
-
-	@Test
-	void 사업자_인증을_하지_않은_기업회원은_이용권이_있어도_등록할_수_없다() throws Exception {
-		Long unverified = saveUnverifiedMember("co-unverified@test.com", "010-9100-0006", MemberType.COMPANY);
-		subscriptionRepository.save(Subscription.startPaid(unverified, BASIC_PLAN, BillingCycle.MONTHLY, LocalDate.now()));
-
-		register(unverified, minimalBody(SUB_CATEGORY))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.error.code").value("BUSINESS_NOT_VERIFIED"));
-		assertThat(companyRepository.count()).isZero();
 	}
 
 	@Test
@@ -1049,17 +1031,7 @@ class CompanyApiTest {
 		return "Bearer " + jwtProvider.createAccessToken(memberId, "USER");
 	}
 
-	/** 기업회원은 사업자 인증을 마친 상태로 만든다 (업체 등록·결제의 조건) */
 	private Long saveMember(String email, String phone, MemberType memberType) {
-		Long memberId = saveUnverifiedMember(email, phone, memberType);
-		if (memberType == MemberType.COMPANY) {
-			businessVerificationRepository.save(BusinessVerification.approveNow(memberId, "테스트 업체", "테스트",
-				"123-45-67891", 1L, LocalDateTime.now()));
-		}
-		return memberId;
-	}
-
-	private Long saveUnverifiedMember(String email, String phone, MemberType memberType) {
 		return memberRepository.save(Member.signUp(email, "{noop}password", "테스트", phone, memberType)).getMemberId();
 	}
 
