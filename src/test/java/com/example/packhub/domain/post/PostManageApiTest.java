@@ -138,6 +138,36 @@ class PostManageApiTest {
 	}
 
 	@Test
+	void 지난_날짜를_그대로_두면_수정되고_날짜를_과거로_바꾸면_400이다() throws Exception {
+		Long postId = create(owner, "납기 지난 의뢰", List.of());
+		LocalDate past = LocalDate.now().minusDays(3);
+		jdbcTemplate.update("UPDATE PostRequest SET desiredDeliveryDate = ?, deadlineDate = ? WHERE postId = ?",
+			past, past, postId);
+
+		update(owner, postId, body("제목만 수정", SUB_CATEGORY, true, 50000, List.of()).replace(
+			LocalDate.now().plusDays(30).toString(), past.toString()))
+			.andExpect(status().isOk());
+		assertThat(postRepository.findById(postId).orElseThrow().getTitle()).isEqualTo("제목만 수정");
+
+		update(owner, postId, body("제목만 수정", SUB_CATEGORY, true, 50000, List.of()).replace(
+			LocalDate.now().plusDays(30).toString(), past.minusDays(1).toString()))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+	}
+
+	@Test
+	void 의뢰_전용_칸만_바꿔도_수정_시각이_갱신된다() throws Exception {
+		Long postId = create(owner, "의뢰", List.of());
+		jdbcTemplate.update("UPDATE Post SET updatedAt = '2026-01-01 00:00:00' WHERE postId = ?", postId);
+
+		update(owner, postId, body("의뢰", SUB_CATEGORY, true, 70000, List.of()))
+			.andExpect(status().isOk());
+
+		assertThat(postRepository.findById(postId).orElseThrow().getUpdatedAt())
+			.isAfter(java.time.LocalDateTime.of(2026, 1, 2, 0, 0));
+	}
+
+	@Test
 	void 남의_의뢰를_수정하면_403이고_바뀌지_않는다() throws Exception {
 		Long postId = create(owner, "원래 제목", List.of());
 

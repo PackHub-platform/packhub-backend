@@ -44,8 +44,8 @@ public record RequestSaveRequest(
 	@NotBlank @Size(max = 50) String artworkProvided,
 	@NotBlank @Size(max = 50) String existingSample,
 
-	@NotNull @FutureOrPresent LocalDate desiredDeliveryDate,
-	@NotNull @FutureOrPresent LocalDate deadlineDate,
+	@NotNull @FutureOrPresent(groups = OnCreate.class) LocalDate desiredDeliveryDate,
+	@NotNull @FutureOrPresent(groups = OnCreate.class) LocalDate deadlineDate,
 	@NotBlank @Size(max = 100) String deliveryRegion,
 	@NotBlank @Size(max = 100) String deliveryMethod,
 	@NotBlank @Size(max = 100) String priceTerms,
@@ -53,6 +53,13 @@ public record RequestSaveRequest(
 
 	@Size(max = 10) List<@NotNull Long> fileIds
 ) {
+
+	/**
+	 * 등록할 때만 쓰는 검사 묶음. 날짜는 등록할 때만 "오늘부터"를 검사하고, 수정에서는 날짜를 바꿀 때만 서비스에서 검사한다
+	 * (이미 지난 날짜를 그대로 두고 다른 칸만 고칠 수 있게)
+	 */
+	public interface OnCreate {
+	}
 
 	/** 첨부를 보내지 않으면 빈 목록으로 본다 */
 	public RequestSaveRequest {

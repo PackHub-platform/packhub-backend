@@ -35,6 +35,7 @@ import com.example.packhub.domain.post.entity.PostRequest;
 import com.example.packhub.domain.post.entity.PostType;
 import com.example.packhub.domain.post.entity.PostVisibility;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.PageRequest;
@@ -100,14 +101,32 @@ public class RequestService {
 		categoryService.validateSelectable(request.categoryId(), CategoryDomain.COMMON);
 		Map<Long, FilePurpose> filePurposes = validateFiles(memberId, request.fileIds());
 
+		PostRequest detail = postRequestRepository.findById(postId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+		checkChangedDates(detail, request);
+
 		request.applyTo(post);
-		postRequestRepository.findById(postId)
-			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND))
-			.update(request.toPostRequest(postId));
+		detail.update(request.toPostRequest(postId));
 		postAttachmentRepository.deleteByPostId(postId);
 		saveAttachments(postId, request.fileIds(), filePurposes);
-		postRepository.flush();
-		return RequestUpdateResponse.from(post);
+		// 의뢰 전용 칸·첨부만 바뀌어도 수정 시각은 갱신한다
+		LocalDateTime now = LocalDateTime.now();
+		postRepository.touch(postId, now);
+		return RequestUpdateResponse.of(post, now);
+	}
+
+	/**
+	 * 수정할 때 날짜는 바꾼 경우에만 "오늘부터"를 검사한다. 이미 지난 날짜를 그대로 두고 다른 칸만 고치는 건 허용한다.
+	 * 바꾼 날짜가 오늘보다 앞이면 400 INVALID_INPUT
+	 */
+	private void checkChangedDates(PostRequest detail, RequestSaveRequest request) {
+		LocalDate today = LocalDate.now();
+		boolean deliveryChanged = !request.desiredDeliveryDate().equals(detail.getDesiredDeliveryDate());
+		boolean deadlineChanged = !request.deadlineDate().equals(detail.getDeadlineDate());
+		if ((deliveryChanged && request.desiredDeliveryDate().isBefore(today))
+			|| (deadlineChanged && request.deadlineDate().isBefore(today))) {
+			throw new BusinessException(ErrorCode.INVALID_INPUT);
+		}
 	}
 
 	/** 의뢰 목록. 게시 중(OPEN)인 의뢰만 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다 */

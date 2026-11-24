@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 public record RequestUpdateResponse(Long postId, PostStatus status, LocalDateTime updatedAt) {
 
-	public static RequestUpdateResponse from(Post post) {
-		return new RequestUpdateResponse(post.getPostId(), post.getStatus(), post.getUpdatedAt());
+	public static RequestUpdateResponse of(Post post, LocalDateTime updatedAt) {
+		return new RequestUpdateResponse(post.getPostId(), post.getStatus(), updatedAt);
 	}
 }

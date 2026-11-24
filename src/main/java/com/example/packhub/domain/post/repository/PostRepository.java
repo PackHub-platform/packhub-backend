@@ -7,12 +7,14 @@ import com.example.packhub.domain.post.entity.PostType;
 import com.example.packhub.domain.post.entity.PostVisibility;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,6 +30,13 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	 */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	Optional<Post> findForUpdateByPostIdAndDeletedAtIsNull(Long postId);
+
+	/**
+	 * 수정 시각만 갱신한다. 의뢰 전용 칸·첨부만 바뀌면 Post 행이 바뀌지 않아 updatedAt이 자동으로 갱신되지 않기 때문에 쓴다
+	 */
+	@Modifying
+	@Query("UPDATE Post p SET p.updatedAt = :now WHERE p.postId = :postId")
+	void touch(@Param("postId") Long postId, @Param("now") LocalDateTime now);
 
 	/**
 	 * 내 게시글 (마이페이지 10-1). 삭제한 글은 빼고, 관리자가 숨긴 글은 보여 준다. 최근에 쓴 글 먼저.
