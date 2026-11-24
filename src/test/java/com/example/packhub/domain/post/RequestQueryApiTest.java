@@ -16,7 +16,7 @@ import com.example.packhub.domain.file.repository.FileRepository;
 import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.entity.MemberType;
 import com.example.packhub.domain.member.repository.MemberRepository;
-import com.example.packhub.domain.post.dto.RequestCreateRequest;
+import com.example.packhub.domain.post.dto.RequestSaveRequest;
 import com.example.packhub.domain.post.repository.PostAttachmentRepository;
 import com.example.packhub.domain.post.repository.PostRepository;
 import com.example.packhub.domain.post.repository.PostRequestRepository;
@@ -325,7 +325,7 @@ class RequestQueryApiTest {
 	private Long create(Long memberId, String title, long categoryId, int deliveryDays, boolean isContactPublic,
 		List<Long> fileIds) {
 		LocalDate deliveryDate = LocalDate.now().plusDays(deliveryDays);
-		return requestService.create(memberId, new RequestCreateRequest(categoryId, title, "상세정보입니다.",
+		return requestService.create(memberId, new RequestSaveRequest(categoryId, title, "상세정보입니다.",
 			isContactPublic, "지퍼 파우치", 50000, "매", 6500000L, "지퍼스탠딩 파우치", "견과류 100g",
 			"160mm x 230mm, 밑지 80mm", "총 104u", "앞면 6도 뒷면 6도", "PET 12u, VMPET 12u, PE 80u", "제공 가능",
 			"제공 가능", deliveryDate, deliveryDate, "경기 파주", "1회 일괄 납품", "부가세·운송비 별도", "협의 가능",

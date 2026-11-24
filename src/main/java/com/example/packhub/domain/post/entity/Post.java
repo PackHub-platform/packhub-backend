@@ -96,4 +96,28 @@ public class Post extends BaseTimeEntity {
 		this.visibility = PostVisibility.VISIBLE;
 		this.viewCount = 0;
 	}
+
+	/** 작성자인지 */
+	public boolean isWrittenBy(Long memberId) {
+		return this.memberId.equals(memberId);
+	}
+
+	/** 수정. 작성자·업체·상태·노출 여부는 바꾸지 않는다 */
+	public void update(Long categoryId, String title, String content, boolean isContactPublic) {
+		this.categoryId = categoryId;
+		this.title = title;
+		this.content = content;
+		this.isContactPublic = isContactPublic;
+	}
+
+	/** 마감(CLOSED)하면 마감 시각을 남기고, 다시 게시(OPEN)하면 지운다 */
+	public void changeStatus(PostStatus status, LocalDateTime now) {
+		this.status = status;
+		this.closedAt = status == PostStatus.CLOSED ? now : null;
+	}
+
+	/** 삭제 표시만 한다. 전용 테이블·첨부는 그대로 둔다 */
+	public void delete(LocalDateTime now) {
+		this.deletedAt = now;
+	}
 }
