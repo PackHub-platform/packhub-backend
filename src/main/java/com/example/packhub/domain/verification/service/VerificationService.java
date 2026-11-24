@@ -69,7 +69,7 @@ public class VerificationService {
 	 */
 	@Transactional(noRollbackFor = BusinessException.class)
 	public VerificationConfirmResponse confirm(VerificationChannel channel, String target, String code) {
-		VerificationCode latest = findLatest(channel, target)
+		VerificationCode latest = verificationCodeRepository.findLatestForUpdate(channel, target)
 			.orElseThrow(() -> new BusinessException(ErrorCode.VERIFICATION_NOT_FOUND));
 		LocalDateTime now = LocalDateTime.now();
 		if (latest.isVerified()) {
@@ -89,9 +89,13 @@ public class VerificationService {
 		return new VerificationConfirmResponse(target, true, now);
 	}
 
-	/** 가입할 때: 이 이메일·번호가 30분 안에 인증을 마쳤는지. 아니면 400 EMAIL_NOT_VERIFIED / PHONE_NOT_VERIFIED */
+	/**
+	 * 가입할 때: 이 이메일·번호가 30분 안에 인증을 마쳤는지. 아니면 400 EMAIL_NOT_VERIFIED / PHONE_NOT_VERIFIED.
+	 * 인증을 마친 기록으로 판단해서, 인증 뒤에 누가 다시 발송을 요청해도 가입이 막히지 않는다
+	 */
 	public void checkVerified(VerificationChannel channel, String target) {
-		boolean verified = findLatest(channel, target)
+		boolean verified = verificationCodeRepository
+			.findFirstByChannelAndTargetAndVerifiedAtIsNotNullOrderByVerificationCodeIdDesc(channel, target)
 			.map(latest -> latest.isVerifiedWithin(LocalDateTime.now(), VERIFIED_VALID_MINUTES))
 			.orElse(false);
 		if (!verified) {

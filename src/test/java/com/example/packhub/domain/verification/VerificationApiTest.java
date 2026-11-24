@@ -168,6 +168,16 @@ class VerificationApiTest {
 	}
 
 	@Test
+	void 인증한_뒤에_인증번호를_다시_보내도_30분_안이면_가입된다() throws Exception {
+		confirm("email", "email", EMAIL, sendAndGetCode("email", "email", EMAIL)).andExpect(status().isOk());
+		confirm("phone", "phone", PHONE, sendAndGetCode("phone", "phone", PHONE)).andExpect(status().isOk());
+		jdbcTemplate.update("UPDATE VerificationCode SET createdAt = DATE_SUB(NOW(), INTERVAL 61 SECOND)");
+		send("email", "email", EMAIL).andExpect(status().isOk());
+
+		signUp().andExpect(status().isCreated());
+	}
+
+	@Test
 	void 인증하고_30분이_지나면_다시_인증해야_가입된다() throws Exception {
 		confirm("email", "email", EMAIL, sendAndGetCode("email", "email", EMAIL)).andExpect(status().isOk());
 		confirm("phone", "phone", PHONE, sendAndGetCode("phone", "phone", PHONE)).andExpect(status().isOk());
