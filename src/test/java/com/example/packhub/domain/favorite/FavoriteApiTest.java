@@ -2,6 +2,7 @@ package com.example.packhub.domain.favorite;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -20,6 +21,9 @@ import com.example.packhub.domain.favorite.repository.FavoriteRepository;
 import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.entity.MemberType;
 import com.example.packhub.domain.member.repository.MemberRepository;
+import com.example.packhub.domain.post.entity.Post;
+import com.example.packhub.domain.post.entity.PostType;
+import com.example.packhub.domain.post.repository.PostRepository;
 import com.example.packhub.global.security.jwt.JwtProvider;
 import java.time.LocalDate;
 import java.util.List;
@@ -42,7 +46,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * 업체 관심 등록·해제, 관심 목록, 업체 목록·상세의 favorited 표시.
+ * 업체·게시글 관심 등록·해제, 관심 목록, 업체 목록·상세의 favorited 표시.
+ * (의뢰 목록·상세의 favorited는 RequestQueryApiTest에서 확인한다)
  * 요청이 실제로 커밋되므로(테스트 롤백 불가) 테스트마다 데이터를 직접 지운다.
  */
 @SpringBootTest
@@ -64,6 +69,9 @@ class FavoriteApiTest {
 
 	@Autowired
 	private CompanyCategoryRepository companyCategoryRepository;
+
+	@Autowired
+	private PostRepository postRepository;
 
 	@Autowired
 	private MemberRepository memberRepository;
@@ -92,6 +100,7 @@ class FavoriteApiTest {
 	@AfterEach
 	void cleanUp() {
 		favoriteRepository.deleteAllInBatch();
+		postRepository.deleteAllInBatch();
 		companyCategoryRepository.deleteAllInBatch();
 		companyRepository.deleteAllInBatch();
 		memberRepository.deleteAllInBatch();
@@ -271,19 +280,130 @@ class FavoriteApiTest {
 	}
 
 	@Test
-	void 관심_목록은_종류로_고를_수_있고_게시글은_아직_없어서_비어_있다() throws Exception {
+	void 관심_목록은_종류로_고를_수_있다() throws Exception {
+		Long post = savePost("견과류 파우치 제작의뢰", "상세정보입니다.");
 		add(general, companyA);
+		addPost(general, post);
 
 		mockMvc.perform(get("/api/v1/bookmarks").param("targetType", "COMPANY")
 				.header(HttpHeaders.AUTHORIZATION, bearer(general)))
 			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(1))
+			.andExpect(jsonPath("$.data.content[0].targetType").value("COMPANY"))
+			.andExpect(jsonPath("$.data.content[0].targetId").value(companyA))
 			.andExpect(jsonPath("$.data.totalElements").value(1));
 
 		mockMvc.perform(get("/api/v1/bookmarks").param("targetType", "POST")
 				.header(HttpHeaders.AUTHORIZATION, bearer(general)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.content.length()").value(0))
-			.andExpect(jsonPath("$.data.totalElements").value(0));
+			.andExpect(jsonPath("$.data.content.length()").value(1))
+			.andExpect(jsonPath("$.data.content[0].targetType").value("POST"))
+			.andExpect(jsonPath("$.data.content[0].targetId").value(post))
+			.andExpect(jsonPath("$.data.content[0].title").value("견과류 파우치 제작의뢰"))
+			.andExpect(jsonPath("$.data.content[0].content").value("상세정보입니다."))
+			.andExpect(jsonPath("$.data.content[0].date").value(LocalDate.now().toString()))
+			.andExpect(jsonPath("$.data.totalElements").value(1));
+	}
+
+	@Test
+	void 종류를_고르지_않으면_업체와_게시글이_저장한_순서로_섞여_나온다() throws Exception {
+		Long post = savePost("견과류 파우치 제작의뢰", "상세정보입니다.");
+		add(general, companyA);
+		addPost(general, post);
+		add(general, companyB);
+		// 저장한 시각이 같은 초에 들어가도 순서가 분명하도록 저장한 날을 직접 벌린다
+		jdbcTemplate.update("UPDATE `Favorite` SET `createdAt` = `createdAt` - INTERVAL 2 DAY WHERE `companyId` = ?",
+			companyA);
+		jdbcTemplate.update("UPDATE `Favorite` SET `createdAt` = `createdAt` - INTERVAL 1 DAY WHERE `postId` = ?", post);
+
+		list(general)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[*].targetType").value(contains("COMPANY", "POST", "COMPANY")))
+			.andExpect(jsonPath("$.data.content[0].targetId").value(companyB))
+			.andExpect(jsonPath("$.data.content[1].targetId").value(post))
+			.andExpect(jsonPath("$.data.content[2].targetId").value(companyA))
+			.andExpect(jsonPath("$.data.totalElements").value(3));
+	}
+
+	@Test
+	void 게시글을_관심으로_등록하고_다시_등록해도_한_번만_저장된다() throws Exception {
+		Long post = savePost("견과류 파우치 제작의뢰", "상세정보입니다.");
+
+		addPost(general, post).andExpect(status().isOk());
+		addPost(general, post).andExpect(status().isOk());
+
+		List<Favorite> favorites = favoriteRepository.findAll();
+		assertThat(favorites).hasSize(1);
+		assertThat(favorites.get(0).getMemberId()).isEqualTo(general);
+		assertThat(favorites.get(0).getTargetType()).isEqualTo(FavoriteTargetType.POST);
+		assertThat(favorites.get(0).getPostId()).isEqualTo(post);
+		assertThat(favorites.get(0).getCompanyId()).isNull();
+	}
+
+	@Test
+	void 마감된_게시글도_관심으로_등록할_수_있고_목록에_남는다() throws Exception {
+		Long post = savePost("마감 의뢰", "상세정보입니다.");
+		jdbcTemplate.update("UPDATE `Post` SET `status` = 'CLOSED', `closedAt` = NOW() WHERE `postId` = ?", post);
+
+		addPost(general, post).andExpect(status().isOk());
+
+		list(general).andExpect(jsonPath("$.data.content[0].targetId").value(post));
+	}
+
+	@Test
+	void 없는_게시글이나_숨김_삭제된_게시글은_등록할_수_없다() throws Exception {
+		Long hidden = savePost("숨김", "내용");
+		Long deleted = savePost("삭제", "내용");
+		jdbcTemplate.update("UPDATE `Post` SET `visibility` = 'HIDDEN' WHERE `postId` = ?", hidden);
+		jdbcTemplate.update("UPDATE `Post` SET `deletedAt` = NOW() WHERE `postId` = ?", deleted);
+
+		for (Long postId : List.of(hidden, deleted, 999999L)) {
+			addPost(general, postId)
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.error.code").value("POST_NOT_FOUND"));
+		}
+		assertThat(favoriteRepository.count()).isZero();
+	}
+
+	@Test
+	void 게시글_관심을_해제하면_그_회원의_그_게시글만_지워지고_저장하지_않은_글을_해제해도_성공이다() throws Exception {
+		Long post = savePost("견과류 파우치 제작의뢰", "상세정보입니다.");
+		Long otherPost = savePost("종이상자 제작의뢰", "상세정보입니다.");
+		addPost(general, post);
+		addPost(general, otherPost);
+		addPost(other, post);
+
+		removePost(general, post).andExpect(status().isOk());
+		removePost(general, post).andExpect(status().isOk());
+
+		assertThat(favoriteRepository.findAll())
+			.extracting(Favorite::getMemberId, Favorite::getPostId)
+			.containsExactlyInAnyOrder(tuple(general, otherPost), tuple(other, post));
+	}
+
+	@Test
+	void 저장한_뒤에_숨김_삭제된_게시글은_관심_목록에서_빠진다() throws Exception {
+		Long hidden = savePost("숨김", "내용");
+		Long deleted = savePost("삭제", "내용");
+		Long kept = savePost("남는 글", "내용");
+		addPost(general, hidden);
+		addPost(general, deleted);
+		addPost(general, kept);
+		jdbcTemplate.update("UPDATE `Post` SET `visibility` = 'HIDDEN' WHERE `postId` = ?", hidden);
+		jdbcTemplate.update("UPDATE `Post` SET `deletedAt` = NOW() WHERE `postId` = ?", deleted);
+
+		list(general)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content.length()").value(1))
+			.andExpect(jsonPath("$.data.content[0].targetId").value(kept))
+			.andExpect(jsonPath("$.data.totalElements").value(1));
+		assertThat(favoriteRepository.count()).isEqualTo(3);
+	}
+
+	@Test
+	void 게시글_관심_등록과_해제는_토큰이_없으면_401() throws Exception {
+		mockMvc.perform(put("/api/v1/bookmarks/posts/{postId}", 1L)).andExpect(status().isUnauthorized());
+		mockMvc.perform(delete("/api/v1/bookmarks/posts/{postId}", 1L)).andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -367,6 +487,16 @@ class FavoriteApiTest {
 			.header(HttpHeaders.AUTHORIZATION, bearer(memberId)));
 	}
 
+	private ResultActions addPost(long memberId, long postId) throws Exception {
+		return mockMvc.perform(put("/api/v1/bookmarks/posts/{postId}", postId)
+			.header(HttpHeaders.AUTHORIZATION, bearer(memberId)));
+	}
+
+	private ResultActions removePost(long memberId, long postId) throws Exception {
+		return mockMvc.perform(delete("/api/v1/bookmarks/posts/{postId}", postId)
+			.header(HttpHeaders.AUTHORIZATION, bearer(memberId)));
+	}
+
 	private ResultActions list(long memberId) throws Exception {
 		return mockMvc.perform(get("/api/v1/bookmarks").header(HttpHeaders.AUTHORIZATION, bearer(memberId)));
 	}
@@ -397,5 +527,17 @@ class FavoriteApiTest {
 			.build()).getCompanyId();
 		companyCategoryRepository.save(CompanyCategory.of(companyId, SUB_CATEGORY));
 		return companyId;
+	}
+
+	/** 의뢰 게시글의 공통 정보(Post)만 저장한다. 관심은 Post만 보므로 의뢰 전용 정보는 만들지 않는다 */
+	private Long savePost(String title, String content) {
+		return postRepository.save(Post.builder()
+			.memberId(other)
+			.postType(PostType.REQUEST)
+			.categoryId(SUB_CATEGORY)
+			.title(title)
+			.content(content)
+			.isContactPublic(true)
+			.build()).getPostId();
 	}
 }

@@ -16,6 +16,7 @@ import java.util.List;
  * 의뢰 칸들은 등록 요청(RequestSaveRequest)과 같은 이름으로 한 층에 둔다.
  *
  * @param isMine  로그인한 회원이 쓴 글이면 true (수정·삭제 버튼 표시)
+ * @param favorited 로그인한 회원이 관심으로 저장했으면 true. 로그인하지 않았으면 false
  * @param writer  작성 업체 (업체 등록 정보)
  * @param contact 의뢰자 정보. 작성자의 현재 회원정보에서 읽는다
  */
@@ -28,6 +29,7 @@ public record RequestDetailResponse(
 	LocalDateTime createdAt,
 	LocalDateTime closedAt,
 	boolean isMine,
+	boolean favorited,
 	Writer writer,
 	Contact contact,
 	String item,
@@ -81,10 +83,10 @@ public record RequestDetailResponse(
 		}
 	}
 
-	public static RequestDetailResponse of(Post post, PostRequest detail, boolean isMine, Writer writer,
+	public static RequestDetailResponse of(Post post, PostRequest detail, boolean isMine, boolean favorited, Writer writer,
 		Contact contact, List<Attachment> attachments) {
 		return new RequestDetailResponse(post.getPostId(), post.getTitle(), post.getContent(), post.getStatus(),
-			post.getCategoryId(), post.getCreatedAt(), post.getClosedAt(), isMine, writer, contact,
+			post.getCategoryId(), post.getCreatedAt(), post.getClosedAt(), isMine, favorited, writer, contact,
 			detail.getItem(), detail.getQuantity(), detail.getQuantityUnit(), detail.getDesiredPrice(),
 			detail.getPackageType(), detail.getContents(), detail.getSpec(), detail.getMaterialThickness(),
 			detail.getPrintSpec(), detail.getMaterialComposition(), detail.getArtworkProvided(),
