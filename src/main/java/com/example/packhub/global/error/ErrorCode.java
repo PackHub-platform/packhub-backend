@@ -45,6 +45,12 @@ public enum ErrorCode {
 	COMPANY_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 업체입니다."),
 	COMPANY_REGISTRATION_REQUIRED(HttpStatus.FORBIDDEN, "업체를 등록한 뒤 이용할 수 있습니다."),
 
+	// 사업자 인증
+	INVALID_BUSINESS_NUMBER(HttpStatus.BAD_REQUEST, "사업자등록번호가 올바르지 않습니다."),
+	BUSINESS_VERIFICATION_ALREADY_APPROVED(HttpStatus.CONFLICT, "이미 사업자 인증을 완료했습니다."),
+	BUSINESS_VERIFICATION_IN_PROGRESS(HttpStatus.CONFLICT, "검토 중인 사업자 인증 신청이 있습니다."),
+	BUSINESS_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "사업자 인증 신청 내역이 없습니다."),
+
 	// 파일
 	INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
 	FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "파일 크기가 허용 범위를 벗어났습니다."),
