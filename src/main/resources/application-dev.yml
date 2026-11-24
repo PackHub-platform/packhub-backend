@@ -5,5 +5,7 @@ spring:
     password: ${DB_PASSWORD}
 
 packhub:
+  verification:
+    expose-code: true # 문자·메일 발송 전이라 프론트·시연이 응답으로 인증번호를 받는다
   s3:
     bucket: ${S3_BUCKET} # 서버 환경 변수로 받는다

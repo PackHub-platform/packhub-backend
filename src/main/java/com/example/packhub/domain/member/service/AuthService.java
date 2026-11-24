@@ -3,6 +3,8 @@ package com.example.packhub.domain.member.service;
 import com.example.packhub.domain.member.dto.LoginRequest;
 import com.example.packhub.domain.business.service.BusinessVerificationService;
 import com.example.packhub.domain.member.dto.LoginResponse;
+import com.example.packhub.domain.verification.entity.VerificationChannel;
+import com.example.packhub.domain.verification.service.VerificationService;
 import com.example.packhub.domain.member.dto.ReissueResponse;
 import com.example.packhub.domain.member.dto.SignUpNextStep;
 import com.example.packhub.domain.member.dto.SignUpRequest;
@@ -29,6 +31,7 @@ public class AuthService {
 	private static final String TOKEN_TYPE = "Bearer";
 
 	private final BusinessVerificationService businessVerificationService;
+	private final VerificationService verificationService;
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtProvider jwtProvider;
@@ -48,6 +51,9 @@ public class AuthService {
 		if (memberRepository.existsByPhone(request.phone())) {
 			throw new BusinessException(ErrorCode.MEMBER_PHONE_DUPLICATED);
 		}
+		// 30분 안에 이메일·휴대폰 인증을 마쳤어야 한다 (2026-11-24 결정)
+		verificationService.checkVerified(VerificationChannel.EMAIL, request.email());
+		verificationService.checkVerified(VerificationChannel.PHONE, request.phone());
 
 		Member member = Member.signUp(request.email(), passwordEncoder.encode(request.password()), request.name(),
 			request.phone(), request.memberType());

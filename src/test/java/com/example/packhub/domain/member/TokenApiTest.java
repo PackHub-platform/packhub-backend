@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.packhub.TestcontainersConfiguration;
+import com.example.packhub.domain.verification.VerificationTestSupport;
+import com.example.packhub.domain.verification.repository.VerificationCodeRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +37,9 @@ class TokenApiTest {
 	private static final String PASSWORD = "Packhub!2026";
 
 	@Autowired
+	private VerificationCodeRepository verificationCodeRepository;
+
+	@Autowired
 	private MockMvc mockMvc;
 
 	@Autowired
@@ -42,6 +47,7 @@ class TokenApiTest {
 
 	@AfterEach
 	void cleanUp() {
+		verificationCodeRepository.deleteAllInBatch();
 		jdbcTemplate.update("DELETE FROM RefreshToken");
 		jdbcTemplate.update("DELETE FROM MemberTermsAgreement");
 		jdbcTemplate.update("DELETE FROM Member");
@@ -181,6 +187,7 @@ class TokenApiTest {
 	}
 
 	private String signUpBody(String email, String phone) throws Exception {
+		VerificationTestSupport.markVerified(verificationCodeRepository, email, phone);
 		return mockMvc.perform(post("/api/v1/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""

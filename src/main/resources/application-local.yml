@@ -10,6 +10,8 @@ jwt:
   secret: local-only-jwt-secret-key-change-me-0123456789 # 로컬 전용 값. 서버에서는 JWT_SECRET 환경 변수를 쓴다
 
 packhub:
+  verification:
+    expose-code: true # 문자·메일 발송 전이라 프론트·시연이 응답으로 인증번호를 받는다
   s3:
     bucket: ${S3_BUCKET:test-bucket} # 실제 이름은 .env에. 공개 저장소라 계정 번호가 든 버킷 이름은 올리지 않는다
     profile: packhub # ~/.aws/credentials의 [packhub] 열쇠를 쓴다. 서버(dev)에는 없어서 EC2 IAM 역할을 쓴다
