@@ -64,6 +64,16 @@ public class BusinessVerificationService {
 		return findLatest(memberId).map(latest -> latest.getStatus().name()).orElse("NONE");
 	}
 
+	/** 사업자 인증을 마쳐야 쓸 수 있는 기능(업체 등록, 결제)에서 호출한다. 아니면 403 BUSINESS_NOT_VERIFIED */
+	public void validateApproved(Long memberId) {
+		boolean approved = findLatest(memberId)
+			.map(latest -> latest.getStatus() == BusinessVerificationStatus.APPROVED)
+			.orElse(false);
+		if (!approved) {
+			throw new BusinessException(ErrorCode.BUSINESS_NOT_VERIFIED);
+		}
+	}
+
 	private Optional<BusinessVerification> findLatest(Long memberId) {
 		return businessVerificationRepository.findFirstByMemberIdOrderByBusinessVerificationIdDesc(memberId);
 	}

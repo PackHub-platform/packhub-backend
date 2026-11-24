@@ -59,6 +59,7 @@ public enum ErrorCode {
 	BUSINESS_VERIFICATION_ALREADY_APPROVED(HttpStatus.CONFLICT, "이미 사업자 인증을 완료했습니다."),
 	BUSINESS_VERIFICATION_IN_PROGRESS(HttpStatus.CONFLICT, "검토 중인 사업자 인증 신청이 있습니다."),
 	BUSINESS_VERIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "사업자 인증 신청 내역이 없습니다."),
+	BUSINESS_NOT_VERIFIED(HttpStatus.FORBIDDEN, "사업자 인증을 완료한 뒤 이용할 수 있습니다."),
 
 	// 게시글
 	POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 게시글입니다."),

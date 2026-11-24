@@ -19,8 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 로그인한 회원(@CurrentMember) 기준으로 동작한다.
- * TODO(사업자 인증 기능 후): 기업회원·사업자 인증 권한 체크를 추가한다.
+ * 로그인한 회원(@CurrentMember) 기준으로 동작한다. 기업회원·사업자 인증 검사는 서비스에서 한다.
  */
 @Tag(name = "이용권·결제")
 @RestController
