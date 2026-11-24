@@ -45,4 +45,12 @@ public class Favorite extends BaseTimeEntity {
 		favorite.companyId = companyId;
 		return favorite;
 	}
+
+	public static Favorite ofPost(Long memberId, Long postId) {
+		Favorite favorite = new Favorite();
+		favorite.memberId = memberId;
+		favorite.targetType = FavoriteTargetType.POST;
+		favorite.postId = postId;
+		return favorite;
+	}
 }

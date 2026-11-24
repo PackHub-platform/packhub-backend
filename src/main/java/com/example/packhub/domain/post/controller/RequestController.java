@@ -52,15 +52,18 @@ public class RequestController {
 	@Operation(summary = "의뢰 목록 조회 (5-1)",
 		description = "로그인 없이 조회할 수 있다. 게시 중(OPEN)인 의뢰만 나오고 마감·숨김·삭제된 의뢰는 나오지 않는다. "
 			+ "검색어는 의뢰 제목·업체명에서 찾는다. categoryId에 대분류를 보내면 그 아래 소분류 전체에서 찾는다. "
-			+ "납기 정렬은 희망납기 기준이고, 희망납기가 지난 의뢰는 맨 뒤에 온다. page는 1부터 시작한다.")
+			+ "납기 정렬은 희망납기 기준이고, 희망납기가 지난 의뢰는 맨 뒤에 온다. page는 1부터 시작한다. "
+			+ "로그인해서 보면 관심으로 저장한 의뢰는 favorited가 true다.")
 	@GetMapping
-	public ApiResponse<RequestPageResponse> search(@ParameterObject @Valid @ModelAttribute RequestSearchRequest request) {
-		return ApiResponse.ok(requestService.search(request));
+	public ApiResponse<RequestPageResponse> search(
+		@Parameter(hidden = true) @AuthenticationPrincipal LoginMember loginMember,
+		@ParameterObject @Valid @ModelAttribute RequestSearchRequest request) {
+		return ApiResponse.ok(requestService.search(request, loginMember == null ? null : loginMember.memberId()));
 	}
 
 	@Operation(summary = "의뢰 상세 조회 (5-2, 5-5)",
 		description = "로그인 없이 조회할 수 있다. 마감된 의뢰도 볼 수 있고, 숨김·삭제된 의뢰는 404다. "
-			+ "로그인해서 보면 내 글일 때 isMine이 true다. 개인정보 공개를 끈 의뢰는 본인이 아니면 contact 값이 null이다. "
+			+ "로그인해서 보면 내 글일 때 isMine이, 관심으로 저장한 글일 때 favorited가 true다. 개인정보 공개를 끈 의뢰는 본인이 아니면 contact 값이 null이다. "
 			+ "첨부의 url은 1시간 동안만 열리는 조회용 주소다.")
 	@GetMapping("/{postId}")
 	public ApiResponse<RequestDetailResponse> getDetail(

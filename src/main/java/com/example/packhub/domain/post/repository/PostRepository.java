@@ -24,6 +24,9 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 	Optional<Post> findByPostIdAndPostTypeAndVisibilityAndDeletedAtIsNull(Long postId, PostType postType,
 		PostVisibility visibility);
 
+	/** 삭제하지 않았고 노출 상태가 맞는 게시글이 있는지 (관심 등록용, 종류·마감 여부는 보지 않는다) */
+	boolean existsByPostIdAndVisibilityAndDeletedAtIsNull(Long postId, PostVisibility visibility);
+
 	/**
 	 * 작성자가 바꾸는 기능(수정·상태 변경·삭제)용. 삭제하지 않은 글이면 숨김 상태여도 찾는다.
 	 * 같은 글에 요청이 동시에 와도 차례대로 처리되도록 행을 잠그고 조회한다 (업체 수정과 같은 방식)

@@ -7,9 +7,9 @@ import java.time.LocalDateTime;
 /**
  * 관심 목록의 카드 하나 (10-2).
  *
- * @param targetId 대상의 ID. 업체면 companyId다
- * @param title    업체면 업체명
- * @param content  업체면 회사설명
+ * @param targetId 대상의 ID. 업체면 companyId, 게시글이면 postId다
+ * @param title    업체면 업체명, 게시글이면 제목
+ * @param content  업체면 회사설명, 게시글이면 내용
  * @param date     저장한 날짜
  */
 public record FavoriteResponse(

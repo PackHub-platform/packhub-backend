@@ -10,6 +10,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.example.packhub.TestcontainersConfiguration;
 import com.example.packhub.domain.company.entity.Company;
 import com.example.packhub.domain.company.repository.CompanyRepository;
+import com.example.packhub.domain.favorite.entity.Favorite;
+import com.example.packhub.domain.favorite.repository.FavoriteRepository;
 import com.example.packhub.domain.file.entity.File;
 import com.example.packhub.domain.file.entity.FilePurpose;
 import com.example.packhub.domain.file.repository.FileRepository;
@@ -94,6 +96,9 @@ class RequestQueryApiTest {
 	private FileRepository fileRepository;
 
 	@Autowired
+	private FavoriteRepository favoriteRepository;
+
+	@Autowired
 	private MemberRepository memberRepository;
 
 	@Autowired
@@ -120,6 +125,7 @@ class RequestQueryApiTest {
 
 	@AfterEach
 	void cleanUp() {
+		favoriteRepository.deleteAllInBatch();
 		postAttachmentRepository.deleteAllInBatch();
 		postRequestRepository.deleteAllInBatch();
 		postRepository.deleteAllInBatch();
@@ -294,6 +300,39 @@ class RequestQueryApiTest {
 
 		mockMvc.perform(get("/api/v1/requests/{postId}", postId))
 			.andExpect(jsonPath("$.data.contact.phone").value("01055556666"));
+	}
+
+	@Test
+	void 목록은_로그인한_회원이_관심으로_저장한_의뢰만_favorited가_true다() throws Exception {
+		Long saved = create(owner, "저장한 의뢰", SUB_CATEGORY, 30, true, List.of());
+		Long notSaved = create(owner, "저장하지 않은 의뢰", SUB_CATEGORY, 30, true, List.of());
+		favoriteRepository.save(Favorite.ofPost(viewer, saved));
+		favoriteRepository.save(Favorite.ofPost(owner, notSaved));
+
+		mockMvc.perform(get("/api/v1/requests").header(HttpHeaders.AUTHORIZATION, bearer(viewer)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[?(@.postId == %d)].favorited".formatted(saved)).value(contains(true)))
+			.andExpect(
+				jsonPath("$.data.content[?(@.postId == %d)].favorited".formatted(notSaved)).value(contains(false)));
+		mockMvc.perform(get("/api/v1/requests"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content[*].favorited").value(contains(false, false)));
+	}
+
+	@Test
+	void 상세는_로그인한_회원이_관심으로_저장했으면_favorited가_true다() throws Exception {
+		Long postId = create(owner, "저장한 의뢰", SUB_CATEGORY, 30, true, List.of());
+		favoriteRepository.save(Favorite.ofPost(viewer, postId));
+
+		mockMvc.perform(get("/api/v1/requests/{postId}", postId).header(HttpHeaders.AUTHORIZATION, bearer(viewer)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.favorited").value(true));
+		mockMvc.perform(get("/api/v1/requests/{postId}", postId).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.favorited").value(false));
+		mockMvc.perform(get("/api/v1/requests/{postId}", postId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.favorited").value(false));
 	}
 
 	@Test

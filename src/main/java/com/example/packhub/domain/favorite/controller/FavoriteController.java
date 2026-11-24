@@ -41,9 +41,24 @@ public class FavoriteController {
 		return ApiResponse.ok();
 	}
 
+	@Operation(summary = "게시글 관심 등록 (9-1)",
+		description = "이미 저장한 게시글을 다시 보내도 성공이다. 마감된 글도 저장할 수 있고, 없거나 숨김·삭제된 글은 404다.")
+	@PutMapping("/posts/{postId}")
+	public ApiResponse<Void> addPost(@CurrentMember Long memberId, @PathVariable Long postId) {
+		favoriteService.addPost(memberId, postId);
+		return ApiResponse.ok();
+	}
+
+	@Operation(summary = "게시글 관심 해제 (9-1)", description = "저장하지 않은 게시글을 보내도 성공이다.")
+	@DeleteMapping("/posts/{postId}")
+	public ApiResponse<Void> removePost(@CurrentMember Long memberId, @PathVariable Long postId) {
+		favoriteService.removePost(memberId, postId);
+		return ApiResponse.ok();
+	}
+
 	@Operation(summary = "관심 목록 조회 (10-2)",
-		description = "최근에 저장한 순서다. 저장한 뒤 숨김·삭제된 업체는 나오지 않는다. "
-			+ "지금은 업체만 있어서 targetType=POST는 빈 목록이다. page는 1부터 시작한다.")
+		description = "최근에 저장한 순서다. 저장한 뒤 숨김·삭제된 업체·게시글은 나오지 않는다. "
+			+ "targetType(COMPANY, POST)을 보내지 않으면 업체와 게시글이 섞여 나온다. page는 1부터 시작한다.")
 	@GetMapping
 	public ApiResponse<FavoritePageResponse> getFavorites(@CurrentMember Long memberId,
 		@ParameterObject @Valid @ModelAttribute FavoriteSearchRequest request) {

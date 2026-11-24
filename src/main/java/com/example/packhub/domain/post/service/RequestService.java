@@ -4,6 +4,7 @@ import com.example.packhub.domain.category.entity.CategoryDomain;
 import com.example.packhub.domain.category.service.CategoryService;
 import com.example.packhub.domain.company.entity.Company;
 import com.example.packhub.domain.company.repository.CompanyRepository;
+import com.example.packhub.domain.favorite.repository.FavoriteRepository;
 import com.example.packhub.domain.file.entity.FilePurpose;
 import com.example.packhub.domain.file.service.FileUsageValidator;
 import com.example.packhub.domain.member.service.CompanyMemberValidator;
@@ -29,6 +30,7 @@ import com.example.packhub.domain.member.repository.MemberRepository;
 import com.example.packhub.domain.post.dto.RequestDetailResponse;
 import com.example.packhub.domain.post.dto.RequestPageResponse;
 import com.example.packhub.domain.post.dto.RequestSearchRequest;
+import com.example.packhub.domain.post.dto.RequestSummaryResponse;
 import com.example.packhub.domain.post.dto.RequestUpdateResponse;
 import com.example.packhub.domain.post.entity.PostStatus;
 import com.example.packhub.domain.post.entity.PostRequest;
@@ -38,6 +40,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -65,6 +68,7 @@ public class RequestService {
 	private final FileService fileService;
 	private final MemberRepository memberRepository;
 	private final PostService postService;
+	private final FavoriteRepository favoriteRepository;
 
 	/**
 	 * 등록하면 바로 게시(OPEN)된다. 저장 순서: Post(번호 받기) → PostRequest·PostAttachment(받은 번호 사용).
@@ -129,20 +133,29 @@ public class RequestService {
 		}
 	}
 
-	/** 의뢰 목록. 게시 중(OPEN)인 의뢰만 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다 */
-	public RequestPageResponse search(RequestSearchRequest request) {
+	/**
+	 * 의뢰 목록. 게시 중(OPEN)인 의뢰만 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다.
+	 *
+	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 favorited는 모두 false다
+	 */
+	public RequestPageResponse search(RequestSearchRequest request, Long memberId) {
 		boolean allCategories = request.categoryId() == null;
 		List<Long> categoryIds = allCategories ? List.of()
 			: categoryService.findFilterIds(request.categoryId(), CategoryDomain.COMMON);
-		return RequestPageResponse.of(postRepository.searchRequests(likePattern(request.keyword()), allCategories,
-			categoryIds, request.sort().name(), LocalDate.now(), PageRequest.of(request.page() - 1, request.size())));
+		Page<RequestSummaryResponse> page = postRepository.searchRequests(likePattern(request.keyword()), allCategories,
+			categoryIds, request.sort().name(), LocalDate.now(), PageRequest.of(request.page() - 1, request.size()));
+
+		Set<Long> favoritePostIds = memberId == null || page.isEmpty() ? Set.of()
+			: Set.copyOf(favoriteRepository.findPostIds(memberId,
+				page.getContent().stream().map(RequestSummaryResponse::postId).toList()));
+		return RequestPageResponse.of(page.map(card -> card.withFavorited(favoritePostIds.contains(card.postId()))));
 	}
 
 	/**
 	 * 의뢰 상세. 마감(CLOSED)된 의뢰도 볼 수 있다. 없거나 숨김·삭제된 의뢰는 404 POST_NOT_FOUND.
 	 * 조회수는 쓰는 화면이 없어 기록하지 않는다 (2026-11-24 결정, 업체와 같음).
 	 *
-	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 isMine은 false다
+	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 isMine·favorited는 false다
 	 */
 	public RequestDetailResponse getDetail(Long postId, Long memberId) {
 		Post post = postRepository
@@ -158,7 +171,8 @@ public class RequestService {
 		boolean isMine = post.getMemberId().equals(memberId);
 		RequestDetailResponse.Contact contact = RequestDetailResponse.Contact.of(post, writer,
 			post.isContactPublic() || isMine);
-		return RequestDetailResponse.of(post, detail, isMine, RequestDetailResponse.Writer.of(post, company),
+		boolean favorited = memberId != null && favoriteRepository.existsByMemberIdAndPostId(memberId, postId);
+		return RequestDetailResponse.of(post, detail, isMine, favorited, RequestDetailResponse.Writer.of(post, company),
 			contact, toAttachments(postId));
 	}
 
