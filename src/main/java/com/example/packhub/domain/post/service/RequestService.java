@@ -22,6 +22,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.IntStream;
+import com.example.packhub.domain.file.entity.File;
+import com.example.packhub.domain.file.service.FileService;
+import com.example.packhub.domain.member.entity.Member;
+import com.example.packhub.domain.member.repository.MemberRepository;
+import com.example.packhub.domain.post.dto.RequestDetailResponse;
+import com.example.packhub.domain.post.dto.RequestPageResponse;
+import com.example.packhub.domain.post.dto.RequestSearchRequest;
+import com.example.packhub.domain.post.entity.PostRequest;
+import com.example.packhub.domain.post.entity.PostType;
+import com.example.packhub.domain.post.entity.PostVisibility;
+import java.time.LocalDate;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.data.domain.PageRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +59,8 @@ public class RequestService {
 	private final CompanyMemberValidator companyMemberValidator;
 	private final CategoryService categoryService;
 	private final FileUsageValidator fileUsageValidator;
+	private final FileService fileService;
+	private final MemberRepository memberRepository;
 
 	/**
 	 * 등록하면 바로 게시(OPEN)된다. 저장 순서: Post(번호 받기) → PostRequest·PostAttachment(받은 번호 사용).
@@ -63,6 +79,62 @@ public class RequestService {
 		postRequestRepository.save(request.toPostRequest(post.getPostId()));
 		saveAttachments(post.getPostId(), request.fileIds(), filePurposes);
 		return RequestCreateResponse.from(post);
+	}
+
+	/** 의뢰 목록. 게시 중(OPEN)인 의뢰만 검색어·카테고리로 찾고 정렬해서 한 페이지만 돌려준다 */
+	public RequestPageResponse search(RequestSearchRequest request) {
+		boolean allCategories = request.categoryId() == null;
+		List<Long> categoryIds = allCategories ? List.of()
+			: categoryService.findFilterIds(request.categoryId(), CategoryDomain.COMMON);
+		return RequestPageResponse.of(postRepository.searchRequests(likePattern(request.keyword()), allCategories,
+			categoryIds, request.sort().name(), LocalDate.now(), PageRequest.of(request.page() - 1, request.size())));
+	}
+
+	/**
+	 * 의뢰 상세. 마감(CLOSED)된 의뢰도 볼 수 있다. 없거나 숨김·삭제된 의뢰는 404 POST_NOT_FOUND.
+	 * 조회수는 쓰는 화면이 없어 기록하지 않는다 (2026-11-24 결정, 업체와 같음).
+	 *
+	 * @param memberId 로그인한 회원. 로그인하지 않았으면 null이고 isMine은 false다
+	 */
+	public RequestDetailResponse getDetail(Long postId, Long memberId) {
+		Post post = postRepository
+			.findByPostIdAndPostTypeAndVisibilityAndDeletedAtIsNull(postId, PostType.REQUEST, PostVisibility.VISIBLE)
+			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+		PostRequest detail = postRequestRepository.findById(postId)
+			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+		Company company = companyRepository.findById(post.getCompanyId())
+			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+		Member writer = memberRepository.findById(post.getMemberId())
+			.orElseThrow(() -> new BusinessException(ErrorCode.POST_NOT_FOUND));
+
+		boolean isMine = post.getMemberId().equals(memberId);
+		RequestDetailResponse.Contact contact = RequestDetailResponse.Contact.of(post, writer,
+			post.isContactPublic() || isMine);
+		return RequestDetailResponse.of(post, detail, isMine, RequestDetailResponse.Writer.of(post, company),
+			contact, toAttachments(postId));
+	}
+
+	/** 첨부를 화면 순서대로. 지워진 파일은 빼고, 파일마다 유효 시간이 있는 조회 주소를 붙인다 */
+	private List<RequestDetailResponse.Attachment> toAttachments(Long postId) {
+		List<PostAttachment> attachments = postAttachmentRepository.findByPostIdOrderBySortOrderAsc(postId);
+		Map<Long, File> files = fileService.findFiles(attachments.stream().map(PostAttachment::getFileId).toList())
+			.stream().collect(Collectors.toMap(File::getFileId, Function.identity()));
+		return attachments.stream()
+			.filter(attachment -> files.containsKey(attachment.getFileId()))
+			.map(attachment -> {
+				File file = files.get(attachment.getFileId());
+				return RequestDetailResponse.Attachment.of(file, attachment.getAttachType(),
+					fileService.viewUrl(file.getStorageKey()));
+			})
+			.toList();
+	}
+
+	/** 검색어의 %, _를 글자 그대로 찾도록 '!'로 이스케이프하고 앞뒤에 %를 붙인다. 검색어가 없으면 null */
+	private String likePattern(String keyword) {
+		if (keyword == null) {
+			return null;
+		}
+		return "%" + keyword.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
 	}
 
 	/** 본인이 게시글 용도로 올린 파일인지 확인하고, 파일마다 사진·문서 중 어느 용도인지 돌려준다 */
