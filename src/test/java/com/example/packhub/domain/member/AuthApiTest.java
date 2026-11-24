@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.packhub.TestcontainersConfiguration;
+import com.example.packhub.domain.verification.VerificationTestSupport;
+import com.example.packhub.domain.verification.repository.VerificationCodeRepository;
 import com.example.packhub.domain.member.entity.Member;
 import com.example.packhub.domain.member.repository.MemberRepository;
 import com.example.packhub.global.security.jwt.JwtProvider;
@@ -35,6 +37,9 @@ class AuthApiTest {
 	private static final String PASSWORD = "Packhub!2026";
 
 	@Autowired
+	private VerificationCodeRepository verificationCodeRepository;
+
+	@Autowired
 	private MockMvc mockMvc;
 
 	@MockitoSpyBean
@@ -51,6 +56,7 @@ class AuthApiTest {
 
 	@AfterEach
 	void cleanUp() {
+		verificationCodeRepository.deleteAllInBatch();
 		jdbcTemplate.update("DELETE FROM RefreshToken");
 		jdbcTemplate.update("DELETE FROM MemberTermsAgreement");
 		memberRepository.deleteAllInBatch();
@@ -171,6 +177,7 @@ class AuthApiTest {
 
 	private ResultActions signUp(String memberType, String email, String phone, String password,
 		String passwordConfirm) throws Exception {
+		VerificationTestSupport.markVerified(verificationCodeRepository, email, phone);
 		return mockMvc.perform(post("/api/v1/auth/signup")
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""

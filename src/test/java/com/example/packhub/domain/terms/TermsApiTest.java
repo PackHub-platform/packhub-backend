@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.packhub.TestcontainersConfiguration;
+import com.example.packhub.domain.verification.VerificationTestSupport;
+import com.example.packhub.domain.verification.repository.VerificationCodeRepository;
 import com.example.packhub.domain.member.repository.MemberRepository;
 import com.example.packhub.domain.terms.entity.MemberTermsAgreement;
 import com.example.packhub.domain.terms.repository.MemberTermsAgreementRepository;
@@ -36,6 +38,9 @@ class TermsApiTest {
 		 {"termsId":4,"agreed":false},{"termsId":5,"agreed":true}]""";
 
 	@Autowired
+	private VerificationCodeRepository verificationCodeRepository;
+
+	@Autowired
 	private MockMvc mockMvc;
 
 	@Autowired
@@ -49,6 +54,7 @@ class TermsApiTest {
 
 	@AfterEach
 	void cleanUp() {
+		verificationCodeRepository.deleteAllInBatch();
 		jdbcTemplate.update("DELETE FROM RefreshToken");
 		agreementRepository.deleteAllInBatch();
 		memberRepository.deleteAllInBatch();
@@ -189,6 +195,7 @@ class TermsApiTest {
 	}
 
 	private ResultActions signUp(String agreements) throws Exception {
+		VerificationTestSupport.markVerified(verificationCodeRepository, EMAIL, "01055556666");
 		return mockMvc.perform(post("/api/v1/auth/signup")
 			.contentType(MediaType.APPLICATION_JSON)
 			.content("""
