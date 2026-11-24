@@ -62,6 +62,8 @@ public enum ErrorCode {
 
 	// 게시글
 	POST_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 게시글입니다."),
+	POST_ALREADY_CLOSED(HttpStatus.CONFLICT, "마감된 게시글은 수정할 수 없습니다."),
+	INVALID_POST_STATUS_TRANSITION(HttpStatus.CONFLICT, "이미 그 상태인 게시글입니다."),
 
 	// 파일
 	INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),

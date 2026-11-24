@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 의뢰하기 등록 요청 (피그마 5-3). 첨부자료 말고 모든 칸이 필수다 (디자이너 답, 2026-11-22).
+ * 의뢰하기 등록·수정 요청 (피그마 5-3, 수정은 5-5 "수정하기"). 수정은 받은 값으로 전체를 바꾼다. 첨부자료 말고 모든 칸이 필수다 (디자이너 답, 2026-11-22).
  * 작성자·업체·담당자 연락처는 받지 않는다. 서버가 로그인 정보와 DB에서 정한다.
  * 파일은 먼저 파일 업로드 API로 올리고 여기에는 fileId만 담는다. 목록의 순서가 화면 표시 순서이고,
  * 사진·문서 구분은 업로드할 때 고른 용도(post-image, post-document)로 정한다.
@@ -24,7 +24,7 @@ import java.util.List;
  * @param desiredPrice    희망 가격(원)
  * @param fileIds         첨부자료 (최대 10개). 없으면 빈 배열
  */
-public record RequestCreateRequest(
+public record RequestSaveRequest(
 	@NotNull Long categoryId,
 	@NotBlank @Size(max = 100) String title,
 	@NotBlank @Size(max = 1500) String content,
@@ -44,8 +44,8 @@ public record RequestCreateRequest(
 	@NotBlank @Size(max = 50) String artworkProvided,
 	@NotBlank @Size(max = 50) String existingSample,
 
-	@NotNull @FutureOrPresent LocalDate desiredDeliveryDate,
-	@NotNull @FutureOrPresent LocalDate deadlineDate,
+	@NotNull @FutureOrPresent(groups = OnCreate.class) LocalDate desiredDeliveryDate,
+	@NotNull @FutureOrPresent(groups = OnCreate.class) LocalDate deadlineDate,
 	@NotBlank @Size(max = 100) String deliveryRegion,
 	@NotBlank @Size(max = 100) String deliveryMethod,
 	@NotBlank @Size(max = 100) String priceTerms,
@@ -54,8 +54,15 @@ public record RequestCreateRequest(
 	@Size(max = 10) List<@NotNull Long> fileIds
 ) {
 
+	/**
+	 * 등록할 때만 쓰는 검사 묶음. 날짜는 등록할 때만 "오늘부터"를 검사하고, 수정에서는 날짜를 바꿀 때만 서비스에서 검사한다
+	 * (이미 지난 날짜를 그대로 두고 다른 칸만 고칠 수 있게)
+	 */
+	public interface OnCreate {
+	}
+
 	/** 첨부를 보내지 않으면 빈 목록으로 본다 */
-	public RequestCreateRequest {
+	public RequestSaveRequest {
 		fileIds = fileIds == null ? List.of() : fileIds;
 	}
 
@@ -70,6 +77,11 @@ public record RequestCreateRequest(
 			.content(content)
 			.isContactPublic(isContactPublic)
 			.build();
+	}
+
+	/** 수정. 공통 정보를 바꾼다 (작성자·업체·상태는 그대로) */
+	public void applyTo(Post post) {
+		post.update(categoryId, title, content, isContactPublic);
 	}
 
 	/** 의뢰 전용 정보. Post를 먼저 저장해서 받은 postId를 넣는다 */

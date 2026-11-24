@@ -1,10 +1,11 @@
 package com.example.packhub.domain.post.controller;
 
-import com.example.packhub.domain.post.dto.RequestCreateRequest;
+import com.example.packhub.domain.post.dto.RequestSaveRequest;
 import com.example.packhub.domain.post.dto.RequestCreateResponse;
 import com.example.packhub.domain.post.dto.RequestDetailResponse;
 import com.example.packhub.domain.post.dto.RequestPageResponse;
 import com.example.packhub.domain.post.dto.RequestSearchRequest;
+import com.example.packhub.domain.post.dto.RequestUpdateResponse;
 import com.example.packhub.domain.post.service.RequestService;
 import com.example.packhub.global.common.ApiResponse;
 import com.example.packhub.global.security.CurrentMember;
@@ -13,14 +14,17 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.groups.Default;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -41,7 +45,7 @@ public class RequestController {
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	public ApiResponse<RequestCreateResponse> create(@CurrentMember Long memberId,
-		@Valid @RequestBody RequestCreateRequest request) {
+		@Validated({Default.class, RequestSaveRequest.OnCreate.class}) @RequestBody RequestSaveRequest request) {
 		return ApiResponse.ok(requestService.create(memberId, request));
 	}
 
@@ -62,5 +66,14 @@ public class RequestController {
 	public ApiResponse<RequestDetailResponse> getDetail(
 		@Parameter(hidden = true) @AuthenticationPrincipal LoginMember loginMember, @PathVariable Long postId) {
 		return ApiResponse.ok(requestService.getDetail(postId, loginMember == null ? null : loginMember.memberId()));
+	}
+
+	@Operation(summary = "의뢰 수정 (5-5)",
+		description = "작성자만 수정할 수 있다. 등록과 같은 값을 모두 보내면 전체를 바꾸고, fileIds에서 뺀 첨부는 지워진다. "
+			+ "마감된 의뢰는 수정할 수 없다(409). 날짜는 바꿀 때만 오늘부터인지 검사해서, 지난 날짜를 그대로 두고 다른 칸만 고칠 수 있다. 상태(마감·재게시)는 PATCH /api/v1/posts/{postId}/status로 바꾼다.")
+	@PutMapping("/{postId}")
+	public ApiResponse<RequestUpdateResponse> update(@CurrentMember Long memberId, @PathVariable Long postId,
+		@Valid @RequestBody RequestSaveRequest request) {
+		return ApiResponse.ok(requestService.update(memberId, postId, request));
 	}
 }

@@ -97,4 +97,26 @@ public class PostRequest {
 		this.priceTerms = priceTerms;
 		this.paymentTerms = paymentTerms;
 	}
+
+	/** 수정. 같은 글(postId)의 의뢰 정보를 source 값으로 모두 바꾼다 */
+	public void update(PostRequest source) {
+		this.item = source.item;
+		this.quantity = source.quantity;
+		this.quantityUnit = source.quantityUnit;
+		this.desiredPrice = source.desiredPrice;
+		this.packageType = source.packageType;
+		this.contents = source.contents;
+		this.spec = source.spec;
+		this.materialThickness = source.materialThickness;
+		this.printSpec = source.printSpec;
+		this.materialComposition = source.materialComposition;
+		this.artworkProvided = source.artworkProvided;
+		this.existingSample = source.existingSample;
+		this.desiredDeliveryDate = source.desiredDeliveryDate;
+		this.deadlineDate = source.deadlineDate;
+		this.deliveryRegion = source.deliveryRegion;
+		this.deliveryMethod = source.deliveryMethod;
+		this.priceTerms = source.priceTerms;
+		this.paymentTerms = source.paymentTerms;
+	}
 }
