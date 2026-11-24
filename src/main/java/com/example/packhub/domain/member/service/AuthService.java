@@ -1,6 +1,7 @@
 package com.example.packhub.domain.member.service;
 
 import com.example.packhub.domain.member.dto.LoginRequest;
+import com.example.packhub.domain.business.service.BusinessVerificationService;
 import com.example.packhub.domain.member.dto.LoginResponse;
 import com.example.packhub.domain.member.dto.ReissueResponse;
 import com.example.packhub.domain.member.dto.SignUpNextStep;
@@ -27,6 +28,7 @@ public class AuthService {
 
 	private static final String TOKEN_TYPE = "Bearer";
 
+	private final BusinessVerificationService businessVerificationService;
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtProvider jwtProvider;
@@ -74,7 +76,7 @@ public class AuthService {
 		member.recordLogin(LocalDateTime.now());
 		return new LoginResponse(createAccessToken(member), refreshTokenService.issue(member.getMemberId()), TOKEN_TYPE,
 			jwtProvider.getAccessTokenValiditySeconds(), refreshTokenService.getValiditySeconds(),
-			LoginResponse.MemberSummary.from(member));
+			LoginResponse.MemberSummary.from(member, businessVerificationService.statusOf(member.getMemberId())));
 	}
 
 	/**

@@ -14,7 +14,7 @@ public record LoginResponse(
 ) {
 
 	/**
-	 * @param businessVerificationStatus 사업자 인증 기능 전까지 NONE으로 고정
+	 * @param businessVerificationStatus 가장 최근 사업자 인증 상태(APPROVED 등). 신청한 적 없으면 NONE
 	 */
 	public record MemberSummary(
 		Long memberId,
@@ -24,9 +24,9 @@ public record LoginResponse(
 		String businessVerificationStatus
 	) {
 
-		public static MemberSummary from(Member member) {
+		public static MemberSummary from(Member member, String businessVerificationStatus) {
 			return new MemberSummary(member.getMemberId(), member.getMemberType(), member.getRole(), member.getName(),
-				"NONE");
+				businessVerificationStatus);
 		}
 	}
 }
